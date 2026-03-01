@@ -1,0 +1,23 @@
+# Secrets
+.env
+
+# Memory persistence
+recall_memory.json
+recall_memory.json.tmp
+memory_store/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Models cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
