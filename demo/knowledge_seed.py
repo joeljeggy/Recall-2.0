@@ -4,8 +4,10 @@ In a real system this could load from a CRM, docs, or FAQ database.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-
+import logging
 from core.memory import Recall
+
+logger = logging.getLogger("recall.demo")
 
 
 def seed_customer_support_knowledge(bank: Recall):
@@ -45,5 +47,5 @@ def seed_customer_support_knowledge(bank: Recall):
         bank.store(fact, memory_type="knowledge", source_agent="KnowledgeSeeder")
         seeded += 1
 
-    print(f"  [Seeder] ✅ Seeded {seeded} knowledge facts into Recall")
+    logger.info("Seeded %d knowledge facts into Recall", seeded)
     return seeded

@@ -15,6 +15,26 @@ Usage:
 import sys
 import os
 import argparse
+import logging
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+def _setup_logging():
+    """Configure structured logging for the entire Recall application."""
+    level = os.environ.get("RECALL_LOG_LEVEL", "INFO").upper()
+    fmt = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-7s | %(name)-28s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(fmt)
+    root = logging.getLogger("recall")
+    root.setLevel(getattr(logging, level, logging.INFO))
+    root.addHandler(handler)
+    # Prevent duplicate logs from propagating to root logger
+    root.propagate = False
+
+_setup_logging()
+logger = logging.getLogger("recall.main")
 
 # Make sure imports resolve from project root (works on Windows, Mac, Linux)
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -25,14 +45,14 @@ def _load_env():
     """Load .env file — works with or without python-dotenv installed."""
     env_path = os.path.join(ROOT, ".env")
     if not os.path.exists(env_path):
-        print(f"  [Recall] ⚠ No .env file found at {env_path}")
-        print("  [Recall] ℹ Rename .env.example to .env and fill in your keys")
+        logger.warning("No .env file found at %s", env_path)
+        logger.info("Rename .env.example to .env and fill in your keys")
         return
 
     try:
         from dotenv import load_dotenv
         load_dotenv(env_path, override=True)  # override=True forces reload
-        print("  [Recall] ✅ Loaded .env via python-dotenv")
+        logger.info("Loaded .env via python-dotenv")
     except ImportError:
         # Manual fallback — no package needed
         loaded = []
@@ -47,7 +67,7 @@ def _load_env():
                 if key and val:
                     os.environ[key] = val  # always set, even if already exists
                     loaded.append(key)
-        print(f"  [Recall] ✅ Loaded .env — keys: {', '.join(loaded)}")
+        logger.info("Loaded .env — keys: %s", ', '.join(loaded))
 
 _load_env()
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,8 +94,7 @@ def build_pipeline(provider: str = None) -> AgentPipeline:
         provider = os.environ.get("RECALL_LLM_PROVIDER", "stub")
     model = os.environ.get("RECALL_MODEL") or None
 
-    print("\n🚀 Initializing Recall Multi-Agent Customer Support System")
-    print("─" * 60)
+    logger.info("Initializing Recall Multi-Agent Customer Support System")
 
     bank = Recall(forget_threshold=0.02, verbose=True)
     seed_customer_support_knowledge(bank)
@@ -87,9 +106,9 @@ def build_pipeline(provider: str = None) -> AgentPipeline:
     ]
 
     pipeline = AgentPipeline(bank, agents, prune_every=10)
-    print(f"\n✅ Pipeline ready | LLM provider: {provider.upper()}")
-    print(f"   Agents: {' → '.join(a.name for a in agents)}")
-    print(f"   Memory seeded: {bank.summary()['total_segments']} segments\n")
+    logger.info("Pipeline ready | LLM provider: %s", provider.upper())
+    logger.info("Agents: %s", ' -> '.join(a.name for a in agents))
+    logger.info("Memory seeded: %d segments", bank.summary()['total_segments'])
     return pipeline
 
 

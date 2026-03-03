@@ -10,10 +10,12 @@ Three agents sharing a single Recall instance:
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import json, re
+import json, re, logging
 from typing import Optional
 from agents.base_agent import BaseAgent
 from core.memory import Recall
+
+logger = logging.getLogger("recall.agents.customer_support")
 
 
 # ────────────────────────────────────────────────────────────────
@@ -40,7 +42,7 @@ Classify the customer message and respond ONLY in this JSON format:
                          system_prompt=self.SYSTEM_PROMPT, **kwargs)
 
     def run(self, task: str, context: Optional[dict] = None) -> dict:
-        print(f"\n{'='*60}\n  🟡 IntakeAgent: {task[:80]}\n{'='*60}")
+        logger.info("IntakeAgent processing: %s", task[:80])
 
         # Step 1 — classify first (no recall yet)
         raw    = self.llm_call(f'Customer message: "{task}"\n\nClassify this message.')
@@ -62,7 +64,7 @@ Classify the customer message and respond ONLY in this JSON format:
             "used_memory_texts": [m.text[:80] for m in past_dialogs],
         })
 
-        print(f"  ✅ IntakeAgent → intent={intent}, urgency={parsed['entities'].get('urgency','?')}")
+        logger.info("IntakeAgent -> intent=%s, urgency=%s", intent, parsed['entities'].get('urgency','?'))
         return {
             "agent":             self.name,
             "output":            parsed,
@@ -123,7 +125,7 @@ Be concise and factual. 3-5 sentences max. Plain text only."""
         intent  = intake.get("intent", "general") if isinstance(intake, dict) else "general"
         summary = intake.get("summary", task)      if isinstance(intake, dict) else task
 
-        print(f"\n{'='*60}\n  🔵 KnowledgeAgent: {summary[:60]}\n{'='*60}")
+        logger.info("KnowledgeAgent processing: %s", summary[:60])
 
         # Search all three banks using enriched query
         # Exclude the dialog segment IntakeAgent just stored this run (it's noise, not history)
@@ -196,8 +198,8 @@ Be concise and factual. 3-5 sentences max. Plain text only."""
             },
         )
 
-        print(f"  ✅ KnowledgeAgent → used {len(all_mems)} memories "
-              f"(k:{len(knowledge_mems)} t:{len(task_mems)} d:{len(dialog_mems)})")
+        logger.info("KnowledgeAgent -> used %d memories (k:%d t:%d d:%d)",
+                     len(all_mems), len(knowledge_mems), len(task_mems), len(dialog_mems))
         return {
             "agent":  self.name,
             "output": synthesis,
@@ -249,7 +251,7 @@ Write a helpful reply to the customer using the context provided.
         # Use knowledge context from KnowledgeAgent — no independent recall
         knowledge = context.get("knowledge_context") or context.get("knowledge", "")
 
-        print(f"\n{'='*60}\n  🟢 ResponseAgent: intent={intent}, urgency={urgency}\n{'='*60}")
+        logger.info("ResponseAgent processing: intent=%s, urgency=%s", intent, urgency)
 
         prompt = (
             f"Customer message: {task}\n"
@@ -260,7 +262,7 @@ Write a helpful reply to the customer using the context provided.
         )
         response = self.llm_call(prompt)
 
-        print(f"  ✅ ResponseAgent → {len(response)} chars")
+        logger.info("ResponseAgent -> %d chars", len(response))
         return {
             "agent":           self.name,
             "output":          response,

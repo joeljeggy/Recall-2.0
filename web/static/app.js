@@ -87,6 +87,7 @@ const AGENT_COLORS = {
 async function runPipeline() {
   const q = document.getElementById('query-input').value.trim();
   if (!q) return;
+  if (q.length > 2000) { toast('Query too long (max 2000 chars)', 'err'); return; }
   const btn = document.getElementById('run-btn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Executing...';
@@ -95,26 +96,98 @@ async function runPipeline() {
   tb.innerHTML = '';
   document.getElementById('trace-elapsed').textContent = '';
 
-  ['IntakeAgent', 'KnowledgeAgent', 'ResponseAgent'].forEach((name, i) => {
-    tb.appendChild(makePendingStep(name, i));
+  const agentNames = ['IntakeAgent', 'KnowledgeAgent', 'ResponseAgent'];
+  const stepEls = agentNames.map((name, i) => {
+    const el = makePendingStep(name, i);
+    tb.appendChild(el);
+    return el;
   });
 
+  const startTime = performance.now();
+  const agentTraces = [];
+  let finalRun = null;
+
   try {
-    const run = await api('POST', '/api/pipeline', { query: q });
-    runHistory.unshift(run);
+    const res = await fetch('/api/pipeline/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q }),
+    });
 
-    tb.innerHTML = '';
-    run.agent_traces.forEach((tr, i) => tb.appendChild(makeAgentStep(tr, i)));
-
-    if (run.response) {
-      const rb = document.createElement('div');
-      rb.className = 'result-box';
-      rb.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(run.response)}</div>`;
-      tb.appendChild(rb);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
     }
 
-    document.getElementById('trace-elapsed').textContent = `${run.elapsed_s}s total`;
-    addRecent(run);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events from buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line in buffer
+
+      let eventType = 'message';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6));
+
+          if (eventType === 'agent_start') {
+            // Agent is starting — show spinner (already shown from pending)
+            const idx = data.index;
+            if (stepEls[idx]) {
+              stepEls[idx].classList.add('step-active');
+            }
+          } else if (eventType === 'agent_complete') {
+            const idx = data.index;
+            const tr = data.trace;
+            agentTraces.push(tr);
+            // Replace pending step with completed step
+            if (stepEls[idx]) {
+              const completed = makeAgentStep(tr, idx);
+              stepEls[idx].replaceWith(completed);
+              stepEls[idx] = completed;
+              // Auto-expand the latest completed step briefly
+              const stepId = completed.querySelector('.step-body')?.id;
+              if (stepId) {
+                const body = document.getElementById(stepId);
+                const chev = document.getElementById('chev-' + stepId);
+                if (body) body.classList.add('open');
+                if (chev) chev.classList.add('open');
+              }
+            }
+          } else if (eventType === 'pipeline_complete') {
+            finalRun = data.run;
+          } else if (eventType === 'error') {
+            throw new Error(data.message || 'Pipeline error');
+          }
+          eventType = 'message'; // reset for next event
+        }
+      }
+    }
+
+    if (finalRun) {
+      if (finalRun.response) {
+        const rb = document.createElement('div');
+        rb.className = 'result-box';
+        rb.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(finalRun.response)}</div>`;
+        tb.appendChild(rb);
+      }
+      document.getElementById('trace-elapsed').textContent = `${finalRun.elapsed_s}s total`;
+      addRecent(finalRun);
+      runHistory.unshift(finalRun);
+    } else {
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+      document.getElementById('trace-elapsed').textContent = `${elapsed}s total`;
+    }
+
     document.getElementById('query-input').value = '';
     updateStatus();
     toast('Pipeline execution completed', 'ok');

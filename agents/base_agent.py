@@ -11,8 +11,11 @@ import sys, os; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspa
 from abc import ABC, abstractmethod
 from typing import Optional
 import os
+import logging
 
 from core.memory import Recall, MemorySegment
+
+logger = logging.getLogger("recall.agents")
 
 
 class BaseAgent(ABC):
@@ -63,7 +66,7 @@ class BaseAgent(ABC):
             min_score=min_score,
         )
         if self.verbose and results:
-            print(f"  [{self.name}] 🔍 Recalled {len(results)} [{memory_type or 'all'}] for: {query[:50]}")
+            logger.info("[%s] Recalled %d [%s] for: %s", self.name, len(results), memory_type or 'all', query[:50])
         return results
 
     def format_memories(self, memories: list[MemorySegment]) -> str:
@@ -95,7 +98,7 @@ class BaseAgent(ABC):
                 return self._call_stub(prompt, sys_msg)
         except Exception as e:
             if self.verbose:
-                print(f"  [{self.name}] ⚠ LLM call failed ({e}), using stub.")
+                logger.warning("[%s] LLM call failed (%s), using stub.", self.name, e)
             return self._call_stub(prompt, sys_msg)
 
     def _call_gemini(self, prompt: str, system: str) -> str:

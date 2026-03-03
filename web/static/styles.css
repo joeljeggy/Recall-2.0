@@ -811,3 +811,13 @@ canvas { width: 100%; height: 100%; }
 .toast.ok svg { color: var(--green); }
 .toast.err svg { color: var(--red); }
 .toast.info svg { color: var(--accent); }
+
+/* ── SSE Streaming: active agent step pulse ── */
+.agent-step.step-active {
+  border-color: var(--accent) !important;
+  animation: stepPulse 1.5s ease-in-out infinite;
+}
+@keyframes stepPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.15); }
+  50%      { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.06); }
+}

@@ -18,9 +18,12 @@ import uuid
 import json
 import re
 import os
+import logging
 from typing import Optional
 from collections import defaultdict
 import numpy as np
+
+logger = logging.getLogger("recall.memory")
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -122,10 +125,10 @@ class SentenceTransformerEmbedder:
                 "Or set RECALL_EMBEDDER=hash in .env to use the built-in embedder."
             )
         self.model_name = model_name
-        print(f"  [Recall] 🤖 Loading sentence-transformers/{model_name}…")
+        logger.info("Loading sentence-transformers/%s…", model_name)
         self._model = SentenceTransformer(model_name)
         self.dim = self._model.get_sentence_embedding_dimension()
-        print(f"  [Recall] ✅ Embedder ready (dim={self.dim})")
+        logger.info("Embedder ready (dim=%d)", self.dim)
 
     def _embed(self, text: str) -> np.ndarray:
         vec = self._model.encode(text, normalize_embeddings=True, show_progress_bar=False)
@@ -167,7 +170,7 @@ def make_embedder(embedder_type: Optional[str] = None):
         model_name = os.environ.get("RECALL_ST_MODEL", "all-MiniLM-L6-v2")
         return SentenceTransformerEmbedder(model_name=model_name)
 
-    print(f"  [Recall] ⚠ Unknown embedder '{choice}', falling back to hash embedder")
+    logger.warning("Unknown embedder '%s', falling back to hash embedder", choice)
     return StableHashEmbedder(dim=256)
 
 # ─────────────────────────────────────────────────────────────────
@@ -421,7 +424,7 @@ class Recall:
         if self._is_duplicate(vec, memory_type, agent_filter=source_agent):
             self.stats["deduped"] += 1
             if self.verbose:
-                print(f"  [Recall] ⊘ Deduped [{memory_type}] from {source_agent}: {text[:50]}…")
+                logger.debug("Deduped [%s] from %s: %s…", memory_type, source_agent, text[:50])
             return None
 
         seg = MemorySegment(
@@ -434,7 +437,7 @@ class Recall:
         self.stats["stored"] += 1
 
         if self.verbose:
-            print(f"  [Recall] ✚ Stored [{memory_type}] from {source_agent}: {text[:60]}{'…' if len(text)>60 else ''}")
+            logger.info("Stored [%s] from %s: %s%s", memory_type, source_agent, text[:60], '…' if len(text)>60 else '')
 
         if self.persist_path:
             self._save(self.persist_path)
@@ -551,7 +554,7 @@ class Recall:
                 pruned += 1
         self.stats["pruned"] += pruned
         if self.verbose and pruned:
-            print(f"  [Recall] 🧹 Pruned {pruned} forgotten segments")
+            logger.info("Pruned %d forgotten segments", pruned)
         if pruned and self.persist_path:
             self._save(self.persist_path)
         return pruned
@@ -588,10 +591,10 @@ class Recall:
                 self._bm25[mtype].add(seg.text, seg.id)
                 loaded += 1
             if self.verbose:
-                print(f"  [Recall] 💾 Loaded {loaded} segments from {path}")
+                logger.info("Loaded %d segments from %s", loaded, path)
         except Exception as e:
             if self.verbose:
-                print(f"  [Recall] ⚠ Could not load {path}: {e}")
+                logger.warning("Could not load %s: %s", path, e)
 
     def save(self, path: Optional[str] = None):
         """Manually trigger a save."""
