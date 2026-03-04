@@ -15,7 +15,6 @@ const ICONS = {
 // ── State ──
 let activeFilter = 'all';
 let runHistory = [];
-let sessionId = localStorage.getItem('recall_session_id') || null;
 
 // ── Nav ──
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -112,7 +111,7 @@ async function runPipeline() {
     const res = await fetch('/api/pipeline/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: q, session_id: sessionId }),
+      body: JSON.stringify({ query: q }),
     });
 
     if (!res.ok) {
@@ -166,12 +165,6 @@ async function runPipeline() {
             }
           } else if (eventType === 'pipeline_complete') {
             finalRun = data.run;
-            // Persist session so subsequent queries carry context
-            if (finalRun && finalRun.session_id) {
-              sessionId = finalRun.session_id;
-              localStorage.setItem('recall_session_id', sessionId);
-              updateSessionUI();
-            }
           } else if (eventType === 'error') {
             throw new Error(data.message || 'Pipeline error');
           }
@@ -307,29 +300,6 @@ function replayRun(run) {
     rb.className = 'result-box';
     rb.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(run.response)}</div>`;
     tb.appendChild(rb);
-  }
-}
-
-// ── Session ──
-function newSession() {
-  if (sessionId) {
-    fetch('/api/session/' + sessionId, { method: 'DELETE' }).catch(() => {});
-  }
-  sessionId = null;
-  localStorage.removeItem('recall_session_id');
-  toast('Session cleared — starting fresh', 'ok');
-  updateSessionUI();
-}
-
-function updateSessionUI() {
-  const el = document.getElementById('session-indicator');
-  if (!el) return;
-  if (sessionId) {
-    el.textContent = 'Session: ' + sessionId.substring(0, 8) + '…';
-    el.style.color = 'var(--green)';
-  } else {
-    el.textContent = 'No active session';
-    el.style.color = 'var(--muted)';
   }
 }
 
@@ -506,4 +476,3 @@ async function initRecent() {
 updateStatus();
 setInterval(updateStatus, 10000);
 initRecent();
-updateSessionUI();

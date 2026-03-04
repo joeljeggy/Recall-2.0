@@ -27,7 +27,6 @@ import json
 import logging
 import sys
 import time
-import uuid
 from flask import Flask, request, jsonify, send_from_directory, Response
 
 # ── Logging setup ──────────────────────────────────────────────
@@ -84,61 +83,6 @@ _limiter = RateLimiter(
     window_seconds=int(os.environ.get("RECALL_RATE_WINDOW", "60")),
 )
 
-# ── Session Store ─────────────────────────────────────────────
-MAX_SESSION_TURNS   = 10        # sliding window: last N user/assistant pairs kept
-SESSION_TTL_SECONDS = 2 * 3600 # sessions expire after 2 h of inactivity
-
-class SessionStore:
-    """Thread-safe in-memory store that keeps conversation history per session."""
-
-    def __init__(self):
-        self._sessions: dict = {}
-        self._lock = threading.Lock()
-
-    def _evict_expired(self):
-        now = time.time()
-        expired = [sid for sid, s in self._sessions.items()
-                   if now - s["last_active"] > SESSION_TTL_SECONDS]
-        for sid in expired:
-            del self._sessions[sid]
-
-    def get_history(self, session_id: str) -> list:
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return []
-            session["last_active"] = time.time()
-            return list(session["turns"])
-
-    def add_turn(self, session_id: str, user: str, assistant: str):
-        with self._lock:
-            self._evict_expired()
-            if session_id not in self._sessions:
-                self._sessions[session_id] = {"turns": [], "last_active": time.time()}
-            session = self._sessions[session_id]
-            session["turns"].append({"role": "user",      "content": user})
-            session["turns"].append({"role": "assistant", "content": assistant})
-            # Keep only the last MAX_SESSION_TURNS exchanges (2 messages per turn)
-            session["turns"] = session["turns"][-(MAX_SESSION_TURNS * 2):]
-            session["last_active"] = time.time()
-
-    def clear(self, session_id: str):
-        with self._lock:
-            self._sessions.pop(session_id, None)
-
-    def info(self, session_id: str) -> dict:
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if not session:
-                return {"session_id": session_id, "turns": 0, "exists": False}
-            return {
-                "session_id": session_id,
-                "turns":      len(session["turns"]) // 2,
-                "exists":     True,
-            }
-
-_session_store = SessionStore()
-
 # ── Input validation helpers ──────────────────────────────────
 MAX_QUERY_LENGTH = 2000
 
@@ -175,8 +119,7 @@ def internal_error(e):
 
 @app.before_request
 def check_rate_limit():
-    # Only rate-limit the expensive LLM pipeline endpoints, not diagnostics
-    if request.path.startswith("/api/pipeline"):
+    if request.path.startswith("/api/"):
         ip = _get_client_ip()
         if not _limiter.is_allowed(ip):
             logger.warning("Rate limit exceeded for %s on %s", ip, request.path)
@@ -221,22 +164,12 @@ def run_pipeline():
     query, err = _validate_query(data)
     if err:
         return err
-
-    session_id           = (data or {}).get("session_id") or str(uuid.uuid4())
-    conversation_history = _session_store.get_history(session_id)
-
     try:
-        run = pipeline.run(query, initial_context={
-            "session_id":            session_id,
-            "conversation_history":  conversation_history,
-        })
+        run = pipeline.run(query)
     except Exception as e:
         logger.exception("Pipeline execution failed for query: %s", query[:80])
         return jsonify({"error": f"Pipeline execution failed: {str(e)}"}), 500
-
-    _session_store.add_turn(session_id, query, run.get("response", ""))
-    run["session_id"] = session_id
-
+    # Serialise — ensure agent traces are JSON-safe
     def safe(v):
         if isinstance(v, dict):  return {k: safe(x) for k,x in v.items()}
         if isinstance(v, list):  return [safe(x) for x in v]
@@ -252,22 +185,10 @@ def run_pipeline_stream():
     if err:
         return err
 
-    session_id           = (data or {}).get("session_id") or str(uuid.uuid4())
-    conversation_history = _session_store.get_history(session_id)
-
     def generate():
         try:
-            initial_context = {
-                "session_id":           session_id,
-                "conversation_history": conversation_history,
-            }
-            for event in pipeline.run_streaming(query, initial_context=initial_context):
+            for event in pipeline.run_streaming(query):
                 event_type = event.get("event", "message")
-                if event_type == "pipeline_complete" and "run" in event:
-                    # Persist this turn and inject session_id into the event payload
-                    response = event["run"].get("response", "")
-                    _session_store.add_turn(session_id, query, response)
-                    event["run"]["session_id"] = session_id
                 # JSON-safe serialisation
                 payload = json.dumps(event, default=str)
                 yield f"event: {event_type}\ndata: {payload}\n\n"
@@ -297,25 +218,6 @@ def get_runs():
     except Exception as e:
         logger.exception("Failed to fetch run history")
         return jsonify({"error": "Failed to fetch run history"}), 500
-
-
-# ── Session ──────────────────────────────────────────────────
-@app.route("/api/session/<session_id>", methods=["GET"])
-def get_session(session_id):
-    """Return metadata for the given session."""
-    return jsonify(_session_store.info(session_id))
-
-@app.route("/api/session/<session_id>/history", methods=["GET"])
-def get_session_history(session_id):
-    """Return the full conversation history for a session."""
-    history = _session_store.get_history(session_id)
-    return jsonify({"session_id": session_id, "history": history})
-
-@app.route("/api/session/<session_id>", methods=["DELETE"])
-def clear_session(session_id):
-    """Clear (end) the given session."""
-    _session_store.clear(session_id)
-    return jsonify({"session_id": session_id, "cleared": True})
 
 
 # ── Health ────────────────────────────────────────────────────

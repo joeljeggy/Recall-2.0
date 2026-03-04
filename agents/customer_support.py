@@ -29,17 +29,11 @@ class IntakeAgent(BaseAgent):
     """
 
     SYSTEM_PROMPT = """You are an intake specialist for a customer support team.
-You may be given previous conversation history for context.
-IMPORTANT: Use the conversation history to resolve vague references like
-"that", "it", "my issue", "the same problem", "my other issue", etc.
-The intent and summary should reflect the resolved meaning, not just the
-literal words of the latest message.
-
 Classify the customer message and respond ONLY in this JSON format:
 {
   "intent": "<billing|technical|account|refund|general>",
   "entities": {"product": "...", "issue": "...", "urgency": "low|medium|high"},
-  "summary": "<one sentence summary of the core issue, resolved using conversation context>"
+  "summary": "<one sentence summary of the core issue>"
 }"""
 
     def __init__(self, bank: Recall, llm_provider: str = "stub", **kwargs):
@@ -50,26 +44,8 @@ Classify the customer message and respond ONLY in this JSON format:
     def run(self, task: str, context: Optional[dict] = None) -> dict:
         logger.info("IntakeAgent processing: %s", task[:80])
 
-        # Build conversation history prefix for the LLM so it can resolve
-        # references like "What about my other issue?" across turns.
-        conv_history = (context or {}).get("conversation_history", [])
-        history_text = ""
-        if conv_history:
-            lines = []
-            for turn in conv_history[-6:]:   # last 3 exchanges (6 messages)
-                role = "Customer" if turn["role"] == "user" else "Support"
-                lines.append(f"{role}: {turn['content'][:200]}")
-            history_text = "\n".join(lines)
-        history_prefix = (
-            f"Previous conversation:\n{history_text}\n\n"
-            if history_text else ""
-        )
-        logger.info("IntakeAgent session history: %d turns injected", len(conv_history) // 2)
-        if conv_history:
-            logger.debug("History prefix:\n%s", history_prefix[:500])
-
         # Step 1 — classify first (no recall yet)
-        raw    = self.llm_call(f'{history_prefix}Customer message: "{task}"\n\nClassify this message.')
+        raw    = self.llm_call(f'Customer message: "{task}"\n\nClassify this message.')
         parsed = self._parse_intake(raw, task)
         intent  = parsed["intent"]
         summary = parsed["summary"]
@@ -275,24 +251,9 @@ Write a helpful reply to the customer using the context provided.
         # Use knowledge context from KnowledgeAgent — no independent recall
         knowledge = context.get("knowledge_context") or context.get("knowledge", "")
 
-        # Build conversation history section so the agent can continue naturally
-        conv_history = context.get("conversation_history", [])
-        history_text = ""
-        if conv_history:
-            lines = []
-            for turn in conv_history[-6:]:   # last 3 exchanges
-                role = "Customer" if turn["role"] == "user" else "Support"
-                lines.append(f"{role}: {turn['content'][:200]}")
-            history_text = "\n".join(lines)
-        history_section = (
-            f"Conversation history:\n{history_text}\n\n"
-            if history_text else ""
-        )
-
         logger.info("ResponseAgent processing: intent=%s, urgency=%s", intent, urgency)
 
         prompt = (
-            f"{history_section}"
             f"Customer message: {task}\n"
             f"Summary: {summary}\n"
             f"Intent: {intent} | Urgency: {urgency}\n\n"
