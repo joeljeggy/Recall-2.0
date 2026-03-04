@@ -79,11 +79,20 @@
         <div class="ph">
           <div class="ph-left">
             <div class="title">Support Pipeline</div>
-            <div class="sub">Intake → Knowledge → Response · Active Context</div>
+            <div class="sub">
+              Intake → Knowledge → Response · Active Context
+              &nbsp;&nbsp;·&nbsp;&nbsp;
+              <span id="session-indicator" style="font-family:var(--mono);font-size:11px">No active session</span>
+            </div>
           </div>
-          <button class="btn btn-ghost" onclick="seedKnowledge()">
-            <svg viewBox="0 0 24 24"><use href="#icon-db"></use></svg> Seed Knowledge
-          </button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-ghost" onclick="newSession()" title="Clear conversation context and start a new session">
+              <svg viewBox="0 0 24 24"><use href="#icon-refresh"></use></svg> New Session
+            </button>
+            <button class="btn btn-ghost" onclick="seedKnowledge()">
+              <svg viewBox="0 0 24 24"><use href="#icon-db"></use></svg> Seed Knowledge
+            </button>
+          </div>
         </div>
         <div class="pipeline-layout">
           <!-- Left: input + recent -->
