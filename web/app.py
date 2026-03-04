@@ -316,7 +316,7 @@ if __name__ == "__main__":
     default_port = int(os.environ.get("PORT", "5000"))
     parser.add_argument("--port",     type=int, default=default_port)
     parser.add_argument("--provider", default=None,
-                        choices=["stub","groq","openai","anthropic","gemini"])
+                        choices=["stub","groq","openai","anthropic","gemini","github"])
     args = parser.parse_args()
     init_agents(args.provider)
     logger.info("Recall -> http://localhost:%d", args.port)

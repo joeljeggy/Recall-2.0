@@ -94,12 +94,38 @@ class BaseAgent(ABC):
                 return self._call_openai(prompt, sys_msg)
             elif provider == "anthropic":
                 return self._call_anthropic(prompt, sys_msg)
+            elif provider == "github":
+                return self._call_github(prompt, sys_msg)
             else:
                 return self._call_stub(prompt, sys_msg)
         except Exception as e:
             if self.verbose:
                 logger.warning("[%s] LLM call failed (%s), using stub.", self.name, e)
             return self._call_stub(prompt, sys_msg)
+
+    def _call_github(self, prompt: str, system: str) -> str:
+        import requests
+        headers = {
+            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": os.environ.get("RECALL_MODEL", "openai/gpt-4o-mini"),
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user",   "content": prompt},
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3,
+        }
+        r = requests.post(
+            "https://models.inference.ai.azure.com/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"].strip()
 
     def _call_gemini(self, prompt: str, system: str) -> str:
         try:
