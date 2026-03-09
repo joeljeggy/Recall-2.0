@@ -1,6 +1,7 @@
 # Core (required)
 numpy>=1.24
 flask>=3.0
+sentence-transformers
 
 # LLM providers (install at least one)
 google-genai          # Gemini — recommended, has free tier
@@ -8,6 +9,3 @@ google-genai          # Gemini — recommended, has free tier
 # openai              # OpenAI
 # anthropic           # Anthropic Claude
 
-# Semantic embeddings (optional but recommended)
- sentence-transformers  # pip install sentence-transformers
-#                        # Set RECALL_EMBEDDER=sentence-transformers in .env

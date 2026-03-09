@@ -1,6 +1,6 @@
 # Recall — Vector-Based Long-Term Memory for Multi-Agent LLM Systems
 
-Implementation of the paper: *"Vector Storage Based Long-term Memory Research on LLM"* (Li et al., 2024)
+Based on the paper: _"Vector Storage Based Long-term Memory Research on LLM"_ (Li et al., 2024)
 
 ## Architecture
 
@@ -31,8 +31,7 @@ Customer Query
 ## Quick Start
 
 ```bash
-pip install numpy scipy flask
-pip install google-genai          # or groq / openai / anthropic
+pip install -r requirements.txt
 cp .env.example .env              # fill in your API key
 python web/app.py --provider gemini
 # Open http://localhost:5000
@@ -62,24 +61,13 @@ Recall/
 └── README.md
 ```
 
-## Embedder Options
-
-Set `RECALL_EMBEDDER` in `.env`:
-
-| Value | Description | Quality |
-|-------|-------------|---------|
-| `hash` | Built-in, zero deps (default) | Keyword matching only |
-| `sentence-transformers` | Semantic search | Understands meaning/paraphrases |
-
-For semantic search: `pip install sentence-transformers` (~80MB model download on first run)
-
 ## Memory Banks
 
-| Bank | Stored by | Content |
-|------|-----------|---------|
-| `knowledge` | Seeder / agents | Facts, policies, documentation |
-| `dialog` | IntakeAgent | Customer queries and intent |
-| `task` | KnowledgeAgent / ResponseAgent | Syntheses and resolutions |
+| Bank        | Stored by                      | Content                        |
+| ----------- | ------------------------------ | ------------------------------ |
+| `knowledge` | Seeder / agents                | Facts, policies, documentation |
+| `dialog`    | IntakeAgent                    | Customer queries and intent    |
+| `task`      | KnowledgeAgent / ResponseAgent | Syntheses and resolutions      |
 
 ## What Makes This Work
 
