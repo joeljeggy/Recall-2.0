@@ -269,7 +269,7 @@ svg {
   display: flex; 
   flex-direction: column; 
   background: var(--bg); 
-  min-width: 0; /* Prevents CSS grid blowout */
+  min-width: 0; 
   overflow: hidden; 
 }
 
@@ -357,14 +357,13 @@ svg {
   height: 48px;
 }
 
-/* Agent step timeline style */
 .agent-step {
   border: 1px solid var(--border);
   border-radius: var(--r);
   background: var(--surface);
   overflow: hidden;
   animation: slideIn 0.3s ease;
-  flex-shrink: 0; /* Important: Prevents cards from getting squished and cutting off content */
+  flex-shrink: 0; 
 }
 
 @keyframes slideIn {
@@ -414,14 +413,29 @@ svg {
 
 .step-chevron.open { transform: rotate(180deg); }
 
-.step-body {
-  display: none;
-  padding: 20px;
-  border-top: 1px solid var(--border);
+
+/* ── Smooth Dropdown Animations ── */
+.step-body, .run-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
   background: var(--bg);
+  border-top: 1px solid transparent;
 }
 
-.step-body.open { display: block; }
+.step-body.open, .run-detail.open {
+  grid-template-rows: 1fr;
+  border-top-color: var(--border);
+}
+
+.step-body-inner, .run-detail-inner {
+  min-height: 0; 
+  overflow: hidden;
+}
+
+.step-body-content, .run-detail-content {
+  padding: 20px;
+}
 
 .step-section { margin-bottom: 20px; }
 .step-section:last-child { margin-bottom: 0; }
@@ -448,8 +462,8 @@ svg {
   overflow-x: auto;
   color: var(--text);
   line-height: 1.6;
-  white-space: pre-wrap; /* Forces long lines to wrap */
-  word-break: break-word; /* Prevents overflow of unbroken strings */
+  white-space: pre-wrap; 
+  word-break: break-word; 
 }
 
 .mem-pill-row {
@@ -543,7 +557,7 @@ svg {
   border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: var(--r);
   padding: 20px;
-  flex-shrink: 0; /* Important: Prevents shrinking/clipping */
+  flex-shrink: 0; 
 }
 
 .result-label {
@@ -603,7 +617,6 @@ svg {
   gap: 8px;
 }
 
-/* bar chart */
 .bar-chart { display: flex; flex-direction: column; gap: 12px; }
 .bar-row { display: flex; align-items: center; gap: 12px; }
 .bar-label { font-size: 13px; color: var(--muted); width: 120px; flex-shrink: 0; }
@@ -611,7 +624,6 @@ svg {
 .bar-fill { height: 100%; border-radius: 3px; transition: width 0.7s ease-out; }
 .bar-val { font-size: 12px; color: var(--text); font-family: var(--mono); min-width: 30px; text-align: right; }
 
-/* retention grid */
 .ret-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
 .ret-card { text-align: center; padding: 16px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
 .ret-val { font-size: 20px; font-family: var(--mono); font-weight: 600; margin-bottom: 4px; }
@@ -667,7 +679,7 @@ canvas { width: 100%; height: 100%; }
   border-radius: var(--r);
   padding: 20px;
   transition: var(--transition);
-  flex-shrink: 0; /* Important: Prevents shrinking/clipping */
+  flex-shrink: 0;
 }
 
 .hi-card:hover { border-color: var(--border2); }
@@ -732,14 +744,6 @@ canvas { width: 100%; height: 100%; }
   align-items: center;
   gap: 16px;
 }
-
-.run-detail {
-  display: none;
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-.run-detail.open { display: block; }
 
 /* intent colors */
 .intent-billing { color: var(--amber); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }

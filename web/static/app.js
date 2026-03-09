@@ -96,7 +96,6 @@ async function runPipeline() {
   tb.innerHTML = '';
   document.getElementById('trace-elapsed').textContent = '';
 
-  // 1. YOUTUBE-STYLE SKELETON LOADER
   const resultBox = document.createElement('div');
   resultBox.className = 'result-box';
   resultBox.style.marginTop = '0';
@@ -127,7 +126,6 @@ async function runPipeline() {
   `;
   tb.appendChild(resultBox);
 
-  // 2. Add agents below the result box
   const agentsContainer = document.createElement('div');
   agentsContainer.style.display = 'flex';
   agentsContainer.style.flexDirection = 'column';
@@ -201,7 +199,6 @@ async function runPipeline() {
     }
 
     if (finalRun) {
-      // OVERWRITE DUMMY RESPONSE WITH ACTUAL COMPLETE RESPONSE
       if (finalRun.response) {
         resultBox.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(finalRun.response)}</div>`;
       } else {
@@ -277,7 +274,10 @@ function makeAgentStep(tr, i) {
   const div = document.createElement('div');
   div.className = 'agent-step';
 
+  let hoverTimeout; 
+
   div.onmouseenter = () => {
+    clearTimeout(hoverTimeout); 
     const body = document.getElementById(stepId);
     const chev = document.getElementById('chev-' + stepId);
     if (body && body.dataset.pinned !== 'true') {
@@ -287,12 +287,14 @@ function makeAgentStep(tr, i) {
   };
   
   div.onmouseleave = () => {
-    const body = document.getElementById(stepId);
-    const chev = document.getElementById('chev-' + stepId);
-    if (body && body.dataset.pinned !== 'true') {
-      body.classList.remove('open');
-      if (chev) chev.classList.remove('open');
-    }
+    hoverTimeout = setTimeout(() => {
+      const body = document.getElementById(stepId);
+      const chev = document.getElementById('chev-' + stepId);
+      if (body && body.dataset.pinned !== 'true') {
+        body.classList.remove('open');
+        if (chev) chev.classList.remove('open');
+      }
+    }, 250); 
   };
 
   div.innerHTML = `
@@ -305,7 +307,14 @@ function makeAgentStep(tr, i) {
         ${hasBody ? `<span class="step-chevron" id="chev-${stepId}">${ICONS.chevron}</span>` : ''}
       </div>
     </div>
-    ${hasBody ? `<div class="step-body" id="${stepId}" data-pinned="false">${memChips}${usedPills}${outputHtml}</div>` : ''}`;
+    ${hasBody ? `
+      <div class="step-body" id="${stepId}" data-pinned="false">
+        <div class="step-body-inner">
+          <div class="step-body-content">
+            ${memChips}${usedPills}${outputHtml}
+          </div>
+        </div>
+      </div>` : ''}`;
   return div;
 }
 
@@ -323,13 +332,6 @@ window.togglePin = function(id) {
     body.classList.add('open');
     if (chev) chev.classList.add('open');
   }
-}
-
-window.toggleStep = function(id) {
-  const body = document.getElementById(id);
-  const chev = document.getElementById('chev-' + id);
-  if (body) body.classList.toggle('open');
-  if (chev) chev.classList.toggle('open');
 }
 
 function addRecent(run) {
@@ -504,7 +506,6 @@ window.filterHistory = function(btn, filter) {
 }
 
 // ── Runs ──
-// ── Runs ──
 async function loadRuns() {
   try {
     const runs = await api('GET', '/api/runs');
@@ -514,7 +515,6 @@ async function loadRuns() {
       return;
     }
     
-    // Clear the list first
     list.innerHTML = '';
 
     runs.forEach((run, ri) => {
@@ -524,8 +524,10 @@ async function loadRuns() {
       const div = document.createElement('div');
       div.className = 'run-card';
 
-      // Hover to open logic
+      let hoverTimeout; 
+
       div.onmouseenter = () => {
+        clearTimeout(hoverTimeout);
         const body = document.getElementById(runId);
         const chev = document.getElementById('chev-' + runId);
         if (body && body.dataset.pinned !== 'true') {
@@ -534,17 +536,17 @@ async function loadRuns() {
         }
       };
       
-      // Leave to close logic
       div.onmouseleave = () => {
-        const body = document.getElementById(runId);
-        const chev = document.getElementById('chev-' + runId);
-        if (body && body.dataset.pinned !== 'true') {
-          body.classList.remove('open');
-          if (chev) chev.classList.remove('open');
-        }
+        hoverTimeout = setTimeout(() => {
+          const body = document.getElementById(runId);
+          const chev = document.getElementById('chev-' + runId);
+          if (body && body.dataset.pinned !== 'true') {
+            body.classList.remove('open');
+            if (chev) chev.classList.remove('open');
+          }
+        }, 250);
       };
 
-      // Notice the onclick="togglePin('${runId}')" on the head
       div.innerHTML = `
         <div class="run-head" onclick="togglePin('${runId}')">
           <span class="run-id">${run.run_id.substring(0,8)}</span>
@@ -557,14 +559,26 @@ async function loadRuns() {
           </div>
         </div>
         <div class="run-detail" id="${runId}" data-pinned="false">
-          <div style="background:var(--bg); border:1px solid var(--border); border-radius: 6px; padding: 16px; font-family:var(--mono); font-size: 12px; color:var(--muted); overflow-x:auto; white-space: pre-wrap; word-break: break-word;">
-            ${esc(JSON.stringify(run.agent_traces, null, 2))}
+          <div class="run-detail-inner">
+            <div class="run-detail-content">
+              <div style="background:var(--bg); border:1px solid var(--border); border-radius: 6px; padding: 16px; font-family:var(--mono); font-size: 12px; color:var(--muted); overflow-x:auto; white-space: pre-wrap; word-break: break-word;">
+                ${esc(JSON.stringify(run.agent_traces, null, 2))}
+              </div>
+            </div>
           </div>
         </div>
       `;
       list.appendChild(div);
     });
   } catch (e) { toast('Failed to load runs', 'err'); }
+}
+
+// ── Init ──
+async function initRecent() {
+  try {
+    const runs = await api('GET', '/api/runs');
+    [...runs].reverse().forEach(run => addRecent(run));
+  } catch { }
 }
 
 updateStatus();
