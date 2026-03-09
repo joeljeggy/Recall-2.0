@@ -11,12 +11,9 @@
 </head>
 
 <body>
-  <!-- Icons Library (Hidden) with viewBox set properly! -->
   <svg style="display:none;" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <!-- New distinct logo icon: Hexagon with a dot -->
       <symbol id="icon-logo" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></symbol>
-      
       <symbol id="icon-zap" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
       <symbol id="icon-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></symbol>
       <symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
@@ -34,7 +31,6 @@
   </svg>
 
   <div class="shell">
-    <!-- Topbar -->
     <header class="topbar">
       <div class="logo">
         <svg class="logo-icon" viewBox="0 0 24 24"><use href="#icon-logo"></use></svg>
@@ -52,7 +48,6 @@
       </div>
     </header>
 
-    <!-- Sidebar -->
     <nav class="sidebar">
       <div class="nav-label">Pipeline</div>
       <div class="nav-item active" data-page="pipeline">
@@ -74,7 +69,6 @@
     </nav>
 
     <main class="main">
-      <!-- ══ PIPELINE PAGE ══════════════════════════════════════════ -->
       <div class="page active" id="page-pipeline">
         <div class="ph">
           <div class="ph-left">
@@ -86,7 +80,6 @@
           </button>
         </div>
         <div class="pipeline-layout">
-          <!-- Left: input + recent -->
           <div class="pipeline-left">
             <div class="query-area">
               <div class="query-label">Customer Query Input</div>
@@ -108,7 +101,6 @@
             </div>
           </div>
 
-          <!-- Right: live trace -->
           <div class="pipeline-right">
             <div class="trace-header">
               <span>Execution Trace</span>
@@ -125,7 +117,6 @@
         </div>
       </div>
 
-      <!-- ══ MEMORY VISUALIZER ════════════════════════════════════════ -->
       <div class="page" id="page-memory">
         <div class="ph">
           <div class="ph-left">
@@ -213,7 +204,6 @@
         </div>
       </div>
 
-      <!-- ══ HISTORY PAGE ═════════════════════════════════════════════ -->
       <div class="page" id="page-history">
         <div class="ph">
           <div class="ph-left">
@@ -238,7 +228,6 @@
         </div>
       </div>
 
-      <!-- ══ RUN HISTORY PAGE ══════════════════════════════════════════ -->
       <div class="page" id="page-runs">
         <div class="ph">
           <div class="ph-left">

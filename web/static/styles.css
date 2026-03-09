@@ -419,8 +419,6 @@ svg {
   padding: 20px;
   border-top: 1px solid var(--border);
   background: var(--bg);
-  max-height: 400px; /* Entire expanded area becomes scrollable */
-  overflow-y: auto;
 }
 
 .step-body.open { display: block; }
@@ -740,8 +738,6 @@ canvas { width: 100%; height: 100%; }
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid var(--border);
-  max-height: 400px;
-  overflow-y: auto;
 }
 .run-detail.open { display: block; }
 

@@ -96,10 +96,48 @@ async function runPipeline() {
   tb.innerHTML = '';
   document.getElementById('trace-elapsed').textContent = '';
 
+  // 1. YOUTUBE-STYLE SKELETON LOADER
+  const resultBox = document.createElement('div');
+  resultBox.className = 'result-box';
+  resultBox.style.marginTop = '0';
+  resultBox.style.marginBottom = '16px';
+  resultBox.innerHTML = `
+    <style>
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .skel-line {
+        height: 12px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, var(--surface) 25%, var(--border2) 50%, var(--surface) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 2s infinite linear;
+        margin-bottom: 12px;
+      }
+    </style>
+    <div class="result-label" style="display:flex; align-items:center; gap:8px; margin-bottom: 16px;">
+      <div class="skel-line" style="width: 140px; height: 14px; margin: 0;"></div>
+    </div>
+    <div class="result-text">
+      <div class="skel-line" style="width: 95%;"></div>
+      <div class="skel-line" style="width: 90%;"></div>
+      <div class="skel-line" style="width: 75%;"></div>
+    </div>
+  `;
+  tb.appendChild(resultBox);
+
+  // 2. Add agents below the result box
+  const agentsContainer = document.createElement('div');
+  agentsContainer.style.display = 'flex';
+  agentsContainer.style.flexDirection = 'column';
+  agentsContainer.style.gap = '16px';
+  tb.appendChild(agentsContainer);
+
   const agentNames = ['IntakeAgent', 'KnowledgeAgent', 'ResponseAgent'];
   const stepEls = agentNames.map((name, i) => {
     const el = makePendingStep(name, i);
-    tb.appendChild(el);
+    agentsContainer.appendChild(el);
     return el;
   });
 
@@ -128,9 +166,8 @@ async function runPipeline() {
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse SSE events from buffer
       const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep incomplete line in buffer
+      buffer = lines.pop(); 
 
       let eventType = 'message';
       for (const line of lines) {
@@ -140,7 +177,6 @@ async function runPipeline() {
           const data = JSON.parse(line.slice(6));
 
           if (eventType === 'agent_start') {
-            // Agent is starting — show spinner (already shown from pending)
             const idx = data.index;
             if (stepEls[idx]) {
               stepEls[idx].classList.add('step-active');
@@ -149,41 +185,33 @@ async function runPipeline() {
             const idx = data.index;
             const tr = data.trace;
             agentTraces.push(tr);
-            // Replace pending step with completed step
             if (stepEls[idx]) {
               const completed = makeAgentStep(tr, idx);
               stepEls[idx].replaceWith(completed);
               stepEls[idx] = completed;
-              // Auto-expand the latest completed step briefly
-              const stepId = completed.querySelector('.step-body')?.id;
-              if (stepId) {
-                const body = document.getElementById(stepId);
-                const chev = document.getElementById('chev-' + stepId);
-                if (body) body.classList.add('open');
-                if (chev) chev.classList.add('open');
-              }
             }
           } else if (eventType === 'pipeline_complete') {
             finalRun = data.run;
           } else if (eventType === 'error') {
             throw new Error(data.message || 'Pipeline error');
           }
-          eventType = 'message'; // reset for next event
+          eventType = 'message'; 
         }
       }
     }
 
     if (finalRun) {
+      // OVERWRITE DUMMY RESPONSE WITH ACTUAL COMPLETE RESPONSE
       if (finalRun.response) {
-        const rb = document.createElement('div');
-        rb.className = 'result-box';
-        rb.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(finalRun.response)}</div>`;
-        tb.appendChild(rb);
+        resultBox.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(finalRun.response)}</div>`;
+      } else {
+        resultBox.remove();
       }
       document.getElementById('trace-elapsed').textContent = `${finalRun.elapsed_s}s total`;
       addRecent(finalRun);
       runHistory.unshift(finalRun);
     } else {
+      resultBox.remove();
       const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
       document.getElementById('trace-elapsed').textContent = `${elapsed}s total`;
     }
@@ -248,8 +276,27 @@ function makeAgentStep(tr, i) {
 
   const div = document.createElement('div');
   div.className = 'agent-step';
+
+  div.onmouseenter = () => {
+    const body = document.getElementById(stepId);
+    const chev = document.getElementById('chev-' + stepId);
+    if (body && body.dataset.pinned !== 'true') {
+      body.classList.add('open');
+      if (chev) chev.classList.add('open');
+    }
+  };
+  
+  div.onmouseleave = () => {
+    const body = document.getElementById(stepId);
+    const chev = document.getElementById('chev-' + stepId);
+    if (body && body.dataset.pinned !== 'true') {
+      body.classList.remove('open');
+      if (chev) chev.classList.remove('open');
+    }
+  };
+
   div.innerHTML = `
-    <div class="step-header" onclick="toggleStep('${stepId}')">
+    <div class="step-header" onclick="togglePin('${stepId}')">
       <div class="step-dot" style="background:${dot}"></div>
       <div class="step-name">${esc(tr.agent)}</div>
       <div class="step-meta">
@@ -258,8 +305,24 @@ function makeAgentStep(tr, i) {
         ${hasBody ? `<span class="step-chevron" id="chev-${stepId}">${ICONS.chevron}</span>` : ''}
       </div>
     </div>
-    ${hasBody ? `<div class="step-body" id="${stepId}">${memChips}${usedPills}${outputHtml}</div>` : ''}`;
+    ${hasBody ? `<div class="step-body" id="${stepId}" data-pinned="false">${memChips}${usedPills}${outputHtml}</div>` : ''}`;
   return div;
+}
+
+window.togglePin = function(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  if (!body) return;
+
+  if (body.dataset.pinned === 'true') {
+    body.dataset.pinned = 'false';
+    body.classList.remove('open');
+    if (chev) chev.classList.remove('open');
+  } else {
+    body.dataset.pinned = 'true';
+    body.classList.add('open');
+    if (chev) chev.classList.add('open');
+  }
 }
 
 window.toggleStep = function(id) {
@@ -294,13 +357,22 @@ function replayRun(run) {
   tb.innerHTML = '';
   document.getElementById('trace-elapsed').textContent = `${run.elapsed_s}s total`;
 
-  run.agent_traces.forEach((tr, i) => tb.appendChild(makeAgentStep(tr, i)));
   if (run.response) {
     const rb = document.createElement('div');
     rb.className = 'result-box';
+    rb.style.marginTop = '0';
+    rb.style.marginBottom = '16px';
     rb.innerHTML = `<div class="result-label">${ICONS.sparkles} Synthesis Complete</div><div class="result-text">${esc(run.response)}</div>`;
     tb.appendChild(rb);
   }
+
+  const agentsContainer = document.createElement('div');
+  agentsContainer.style.display = 'flex';
+  agentsContainer.style.flexDirection = 'column';
+  agentsContainer.style.gap = '16px';
+  tb.appendChild(agentsContainer);
+
+  run.agent_traces.forEach((tr, i) => agentsContainer.appendChild(makeAgentStep(tr, i)));
 }
 
 // ── Seed / Memory ──
@@ -432,6 +504,7 @@ window.filterHistory = function(btn, filter) {
 }
 
 // ── Runs ──
+// ── Runs ──
 async function loadRuns() {
   try {
     const runs = await api('GET', '/api/runs');
@@ -440,37 +513,58 @@ async function loadRuns() {
       list.innerHTML = `<div class="empty-state">${ICONS.activity}<div>No execution history found</div></div>`;
       return;
     }
-    list.innerHTML = runs.map((run, ri) => {
+    
+    // Clear the list first
+    list.innerHTML = '';
+
+    runs.forEach((run, ri) => {
       const intent = run.agent_traces?.[0]?.output?.intent || 'general';
       const runId = 'run-' + ri;
-      return `
-        <div class="run-card">
-          <div class="run-head" onclick="toggleStep('${runId}')">
-            <span class="run-id">${run.run_id.substring(0,8)}</span>
-            <span class="run-query">${esc(run.task)}</span>
-            <div class="run-meta">
-              <span class="type-badge intent-${intent}">${intent}</span>
-              <span style="font-family:var(--mono)">${run.elapsed_s}s</span>
-              <span>${ago(run.timestamp * 1000)}</span>
-              <span class="step-chevron open" id="chev-${runId}">${ICONS.chevron}</span>
-            </div>
-          </div>
-          <div class="run-detail open" id="${runId}">
-            <div style="background:var(--bg); border:1px solid var(--border); border-radius: 6px; padding: 16px; font-family:var(--mono); font-size: 12px; color:var(--muted); overflow-x:auto; white-space: pre-wrap; word-break: break-word;">
-              ${esc(JSON.stringify(run.agent_traces, null, 2))}
-            </div>
-          </div>
-        </div>`;
-    }).join('');
-  } catch (e) { toast('Failed to load runs', 'err'); }
-}
+      
+      const div = document.createElement('div');
+      div.className = 'run-card';
 
-// ── Init ──
-async function initRecent() {
-  try {
-    const runs = await api('GET', '/api/runs');
-    [...runs].reverse().forEach(run => addRecent(run));
-  } catch { }
+      // Hover to open logic
+      div.onmouseenter = () => {
+        const body = document.getElementById(runId);
+        const chev = document.getElementById('chev-' + runId);
+        if (body && body.dataset.pinned !== 'true') {
+          body.classList.add('open');
+          if (chev) chev.classList.add('open');
+        }
+      };
+      
+      // Leave to close logic
+      div.onmouseleave = () => {
+        const body = document.getElementById(runId);
+        const chev = document.getElementById('chev-' + runId);
+        if (body && body.dataset.pinned !== 'true') {
+          body.classList.remove('open');
+          if (chev) chev.classList.remove('open');
+        }
+      };
+
+      // Notice the onclick="togglePin('${runId}')" on the head
+      div.innerHTML = `
+        <div class="run-head" onclick="togglePin('${runId}')">
+          <span class="run-id">${run.run_id.substring(0,8)}</span>
+          <span class="run-query">${esc(run.task)}</span>
+          <div class="run-meta">
+            <span class="type-badge intent-${intent}">${intent}</span>
+            <span style="font-family:var(--mono)">${run.elapsed_s}s</span>
+            <span>${ago(run.timestamp * 1000)}</span>
+            <span class="step-chevron" id="chev-${runId}">${ICONS.chevron}</span>
+          </div>
+        </div>
+        <div class="run-detail" id="${runId}" data-pinned="false">
+          <div style="background:var(--bg); border:1px solid var(--border); border-radius: 6px; padding: 16px; font-family:var(--mono); font-size: 12px; color:var(--muted); overflow-x:auto; white-space: pre-wrap; word-break: break-word;">
+            ${esc(JSON.stringify(run.agent_traces, null, 2))}
+          </div>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+  } catch (e) { toast('Failed to load runs', 'err'); }
 }
 
 updateStatus();
