@@ -2,14 +2,13 @@
 Recall - Vector-based Long-Term Memory for Multi-Agent Systems
 Based on: "Vector Storage Based Long-term Memory Research on LLM"
 
-Fixes applied:
-  - Stable hashing embedder (no IDF drift, no stale vectors)
-  - BM25 score normalisation via min-max per query (not hardcoded /10)
-  - BM25 index synced with prune (deleted segments removed from index)
-  - Deduplication on store (cosine similarity threshold)
-  - Ebbinghaus lambda initialised by source quality
-  - Persistence via JSON (auto-save/load)
-  - agent_filter exposed cleanly
+Components:
+  - SentenceTransformerEmbedder — semantic dense vectors (all-MiniLM-L6-v2)
+  - BM25Retriever               — sparse keyword retrieval, min-max normalised
+  - Hybrid retrieval            — α·cosine + (1−α)·BM25, fused per query
+  - Ebbinghaus forgetting curve — R(t) = e^(-t/λ), recall strengthens λ
+  - Deduplication               — cosine similarity threshold on store
+  - Persistence                 — atomic JSON save/load
 """
 
 import math
@@ -27,92 +26,19 @@ logger = logging.getLogger("recall.memory")
 
 
 # ─────────────────────────────────────────────────────────────────
-#  StableHashEmbedder
-#  Uses random projection seeded by token hash — vectors are stable
-#  across documents and never need recomputation when vocab grows.
-# ─────────────────────────────────────────────────────────────────
-
-class StableHashEmbedder:
-    """
-    Embedder based on random projection of token hashes.
-
-    Unlike TF-IDF, vectors are stable — storing new documents never
-    invalidates previously computed vectors. Each token maps to a
-    fixed random unit vector seeded by its string hash, so "billing"
-    always maps to the same direction regardless of corpus size.
-
-    Still bag-of-words (no semantics), but correct and fast.
-    Swap for sentence-transformers to get true semantic search.
-    """
-
-    def __init__(self, dim: int = 256, seed: int = 42):
-        self.dim = dim
-        self.seed = seed
-        self._cache: dict[str, np.ndarray] = {}
-
-    def _token_vector(self, token: str) -> np.ndarray:
-        if token in self._cache:
-            return self._cache[token]
-        # Seed RNG with token hash for stable, unique projection
-        h = hash(token) & 0xFFFFFFFF
-        rng = np.random.RandomState(h ^ self.seed)
-        v = rng.randn(self.dim).astype(np.float32)
-        v /= (np.linalg.norm(v) + 1e-9)
-        self._cache[token] = v
-        return v
-
-    def _tokenize(self, text: str) -> list[str]:
-        return re.findall(r"[a-zA-Z0-9]+", text.lower())
-
-    def _embed(self, text: str) -> np.ndarray:
-        tokens = self._tokenize(text)
-        if not tokens:
-            return np.zeros(self.dim, dtype=np.float32)
-        # TF weighting over stable token vectors
-        tf: dict[str, int] = defaultdict(int)
-        for t in tokens:
-            tf[t] += 1
-        vec = np.zeros(self.dim, dtype=np.float32)
-        for t, count in tf.items():
-            weight = count / len(tokens)
-            vec += weight * self._token_vector(t)
-        norm = np.linalg.norm(vec)
-        if norm > 0:
-            vec /= norm
-        return vec
-
-    # Public API matches old LocalEmbedder so it's a drop-in replacement
-    def fit_transform(self, text: str) -> np.ndarray:
-        return self._embed(text)
-
-    def transform(self, text: str) -> np.ndarray:
-        return self._embed(text)
-
-
-
-# ─────────────────────────────────────────────────────────────────
 #  SentenceTransformerEmbedder
-#  True semantic embeddings — "login failed" ≈ "can't authenticate"
-#  Requires: pip install sentence-transformers
-#  Set RECALL_EMBEDDER=sentence-transformers in .env to enable.
 # ─────────────────────────────────────────────────────────────────
 
 class SentenceTransformerEmbedder:
     """
-    Semantic embedder using sentence-transformers.
+    Semantic embedder using sentence-transformers (all-MiniLM-L6-v2 by default).
 
-    Unlike StableHashEmbedder (bag-of-words), this understands meaning:
+    Understands meaning — paraphrases and synonyms score highly:
       "I was charged twice"  ≈  "double billing on my account"
       "can't log in"         ≈  "authentication failure"
       "API rate limit"       ≈  "429 error too many requests"
 
-    Models (all free, run locally, no API key needed):
-      all-MiniLM-L6-v2   — 80MB,  fastest,  good quality  (default)
-      all-MiniLM-L12-v2  — 120MB, balanced
-      all-mpnet-base-v2  — 420MB, best quality, slower
-
-    First run downloads the model (~80MB). Cached in ~/.cache/huggingface.
-    CPU inference is fast enough for this use case (<50ms per segment).
+    Model is downloaded once (~80MB) and cached in ~/.cache/huggingface.
     """
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
@@ -121,8 +47,7 @@ class SentenceTransformerEmbedder:
         except ImportError:
             raise RuntimeError(
                 "sentence-transformers not installed.\n"
-                "Run: pip install sentence-transformers\n"
-                "Or set RECALL_EMBEDDER=hash in .env to use the built-in embedder."
+                "Run: pip install sentence-transformers"
             )
         self.model_name = model_name
         logger.info("Loading sentence-transformers/%s…", model_name)
@@ -135,43 +60,13 @@ class SentenceTransformerEmbedder:
         return vec.astype(np.float32)
 
     def fit_transform(self, text: str) -> np.ndarray:
-        """Embed a new document (no vocab update needed — model is pre-trained)."""
+        """Embed a document for storage."""
         return self._embed(text)
 
     def transform(self, text: str) -> np.ndarray:
-        """Embed a query."""
+        """Embed a query for retrieval."""
         return self._embed(text)
 
-
-# ─────────────────────────────────────────────────────────────────
-#  Embedder factory — reads RECALL_EMBEDDER from environment
-# ─────────────────────────────────────────────────────────────────
-
-def make_embedder(embedder_type: Optional[str] = None):
-    """
-    Return the configured embedder.
-
-    embedder_type / RECALL_EMBEDDER options:
-      "hash"                 — StableHashEmbedder (default, no deps)
-      "sentence-transformers"
-      "st"                   — SentenceTransformerEmbedder (all-MiniLM-L6-v2)
-      "st:all-mpnet-base-v2" — SentenceTransformerEmbedder with specific model
-    """
-    choice = (embedder_type or os.environ.get("RECALL_EMBEDDER", "hash")).strip().lower()
-
-    if choice in ("hash", "stable", "default"):
-        return StableHashEmbedder(dim=256)
-
-    if choice.startswith("st:"):
-        model_name = choice[3:].strip()
-        return SentenceTransformerEmbedder(model_name=model_name)
-
-    if choice in ("st", "sentence-transformers", "sentence_transformers", "sbert"):
-        model_name = os.environ.get("RECALL_ST_MODEL", "all-MiniLM-L6-v2")
-        return SentenceTransformerEmbedder(model_name=model_name)
-
-    logger.warning("Unknown embedder '%s', falling back to hash embedder", choice)
-    return StableHashEmbedder(dim=256)
 
 # ─────────────────────────────────────────────────────────────────
 #  BM25Retriever
@@ -180,7 +75,7 @@ def make_embedder(embedder_type: Optional[str] = None):
 class BM25Retriever:
     """
     BM25 keyword retriever with:
-    - Per-query min-max score normalisation (fixes hardcoded /10 bug)
+    - Per-query min-max score normalisation (results comparable with cosine)
     - delete() method to stay in sync with pruned segments
     """
 
@@ -192,14 +87,14 @@ class BM25Retriever:
         self._tokenized: list[list[str]] = []
         self._df:        dict[str, int]  = defaultdict(int)
         self._avgdl:     float           = 0.0
-        self._id_to_idx: dict[str, int]  = {}   # fast lookup
+        self._id_to_idx: dict[str, int]  = {}
 
     def _tokenize(self, text: str) -> list[str]:
         return re.findall(r"[a-zA-Z0-9]+", text.lower())
 
     def add(self, text: str, doc_id: str):
         if doc_id in self._id_to_idx:
-            return  # already indexed
+            return
         tokens = self._tokenize(text)
         idx = len(self._docs)
         self._id_to_idx[doc_id] = idx
@@ -216,12 +111,11 @@ class BM25Retriever:
         idx = self._id_to_idx.pop(doc_id, None)
         if idx is None:
             return
-        # Mark as deleted by zeroing tokens (avoids index rebuild)
         old_tokens = self._tokenized[idx]
         for t in set(old_tokens):
             self._df[t] = max(0, self._df[t] - 1)
         self._tokenized[idx] = []
-        self._doc_ids[idx]   = None   # tombstone
+        self._doc_ids[idx]   = None
         total = sum(len(d) for d in self._tokenized)
         self._avgdl = total / max(sum(1 for d in self._tokenized if d), 1)
 
@@ -254,7 +148,6 @@ class BM25Retriever:
         scores.sort(key=lambda x: x[1], reverse=True)
         top = scores[:top_k]
 
-        # Min-max normalise to [0, 1] so scores are comparable with cosine
         if top:
             min_s = min(s for _, s in top)
             max_s = max(s for _, s in top)
@@ -276,11 +169,10 @@ class MemorySegment:
 
     MEMORY_TYPES = ("knowledge", "dialog", "task")
 
-    # Initial λ by source quality — higher = slower forgetting
     LAMBDA_INIT = {
-        "knowledge": 2.0,   # facts should persist longer
-        "task":      1.5,   # decisions moderately persistent
-        "dialog":    1.0,   # conversation exchanges decay fastest
+        "knowledge": 2.0,
+        "task":      1.5,
+        "dialog":    1.0,
     }
 
     def __init__(
@@ -305,39 +197,28 @@ class MemorySegment:
         self.recall_count  = 0
 
     def retention(self) -> float:
-        """
-        R(t) = e^(-t/λ) — memory strength since first stored.
-
-        t is elapsed from created_at, NOT last_accessed. Each recall increases
-        λ, flattening the curve so the same elapsed time yields higher retention.
-        This matches Ebbinghaus: review doesn't restart the clock, it makes
-        the forgetting curve shallower going forward.
-        """
+        """R(t) = e^(-t/λ) — t elapsed from created_at in hours."""
         elapsed_h = (time.time() - self.created_at) / 3600
         return math.exp(-elapsed_h / (self.lambda_forget + 1e-9))
 
     def on_recalled(self):
-        """
-        Strengthen memory on retrieval (spaced repetition / review effect).
-        λ increases → curve flattens → same elapsed time = higher retention.
-        last_accessed tracked for UI display only, not used in retention().
-        """
+        """Spaced repetition: λ += 1 per recall → slower forgetting."""
         self.recall_count  += 1
         self.lambda_forget += 1.0
         self.last_accessed  = time.time()
 
     def to_dict(self) -> dict:
         return {
-            "id":           self.id,
-            "text":         self.text,
-            "memory_type":  self.memory_type,
-            "source_agent": self.source_agent,
-            "created_at":   self.created_at,
+            "id":            self.id,
+            "text":          self.text,
+            "memory_type":   self.memory_type,
+            "source_agent":  self.source_agent,
+            "created_at":    self.created_at,
             "last_accessed": self.last_accessed,
             "lambda_forget": self.lambda_forget,
-            "recall_count": self.recall_count,
-            "retention":    round(self.retention(), 3),
-            "metadata":     self.metadata,
+            "recall_count":  self.recall_count,
+            "retention":     round(self.retention(), 3),
+            "metadata":      self.metadata,
         }
 
     @classmethod
@@ -368,18 +249,20 @@ class Recall:
     """
     Universal long-term memory bank for multi-agent systems.
 
-    Implements:
-      1. Storage      — multi-type banks + stable vectors + BM25
-      2. Retrieval    — hybrid dense+sparse with proper normalisation
-      3. Update       — Ebbinghaus forgetting curve + pruning
-      4. Dedup        — similarity threshold prevents near-duplicate storage
-      5. Persistence  — JSON save/load so memory survives restarts
+    Retrieval: hybrid SentenceTransformer (dense) + BM25 (sparse)
+      S = α·cosine + (1−α)·BM25   (α=0.6 by default)
+
+    1. Storage    — three typed banks (knowledge/dialog/task) + BM25 index
+    2. Retrieval  — hybrid dense+sparse, min-max normalised, intent-filtered
+    3. Decay      — Ebbinghaus R(t)=e^(-t/λ), recall strengthens λ
+    4. Dedup      — cosine threshold prevents near-duplicate storage
+    5. Persistence — atomic JSON save/load across restarts
     """
 
     def __init__(
         self,
         forget_threshold: float = 0.05,
-        dedup_threshold:  float = 0.92,   # cosine similarity above this = duplicate
+        dedup_threshold:  float = 0.92,
         embedder=None,
         persist_path: Optional[str] = None,
         verbose: bool = True,
@@ -388,7 +271,9 @@ class Recall:
         self.dedup_threshold  = dedup_threshold
         self.persist_path     = persist_path
         self.verbose          = verbose
-        self.embedder         = embedder or make_embedder()
+
+        model_name    = os.environ.get("RECALL_ST_MODEL", "all-MiniLM-L6-v2")
+        self.embedder = embedder or SentenceTransformerEmbedder(model_name=model_name)
 
         self._banks: dict[str, dict[str, MemorySegment]] = {
             "knowledge": {}, "dialog": {}, "task": {},
@@ -414,13 +299,9 @@ class Recall:
         lambda_init: Optional[float] = None,
         agent_filter: Optional[str] = None,
     ) -> Optional[MemorySegment]:
-        """
-        Store a memory segment. Returns None if deduplicated.
-        agent_filter: if set, only checks duplicates against this agent's segments.
-        """
+        """Store a memory segment. Returns None if deduplicated."""
         vec = self.embedder.fit_transform(text)
 
-        # Deduplication check
         if self._is_duplicate(vec, memory_type, agent_filter=source_agent):
             self.stats["deduped"] += 1
             if self.verbose:
@@ -437,7 +318,7 @@ class Recall:
         self.stats["stored"] += 1
 
         if self.verbose:
-            logger.info("Stored [%s] from %s: %s%s", memory_type, source_agent, text[:60], '…' if len(text)>60 else '')
+            logger.info("Stored [%s] from %s: %s%s", memory_type, source_agent, text[:60], '…' if len(text) > 60 else '')
 
         if self.persist_path:
             self._save(self.persist_path)
@@ -445,15 +326,13 @@ class Recall:
         return seg
 
     def _is_duplicate(self, vec: np.ndarray, memory_type: str, agent_filter: Optional[str] = None) -> bool:
-        """Check if a near-identical segment already exists."""
         bank = self._banks[memory_type]
         for seg in bank.values():
             if agent_filter and seg.source_agent != agent_filter:
                 continue
             if seg.vector is None:
                 continue
-            sim = float(np.dot(vec, seg.vector))
-            if sim >= self.dedup_threshold:
+            if float(np.dot(vec, seg.vector)) >= self.dedup_threshold:
                 return True
         return False
 
@@ -466,16 +345,15 @@ class Recall:
         top_k: int = 5,
         time_weight: float = 0.3,
         agent_filter: Optional[str] = None,
-        alpha: float = 0.6,    # weight for dense score (1-alpha = BM25 weight)
-        min_score: float = 0.10,  # minimum fused score — filters irrelevant results
+        alpha: float = 0.6,
+        min_score: float = 0.10,
     ) -> list[MemorySegment]:
         """
-        Hybrid retrieval: stable cosine (dense) + normalised BM25 (sparse).
-        Fused as: alpha * dense + (1-alpha) * bm25_normalised
+        Hybrid retrieval: semantic cosine (dense) + BM25 (sparse).
+        S = alpha * cosine + (1-alpha) * bm25_normalised
         """
         types     = [memory_type] if memory_type else list(self._banks.keys())
         query_vec = self.embedder.transform(query)
-        # dense_scores[seg_id] = score
         dense_scores: dict[str, float] = {}
         bm25_scores:  dict[str, float] = {}
 
@@ -484,22 +362,17 @@ class Recall:
             if not bank:
                 continue
 
-            # ── Dense ──────────────────────────────────────────
             for seg_id, seg in bank.items():
                 if agent_filter and seg.source_agent != agent_filter:
                     continue
                 if seg.vector is None:
                     continue
                 cos_sim = float(np.dot(query_vec, seg.vector))
-
-                # Temporal decay for dialog/task
                 if mtype in ("dialog", "task"):
                     elapsed_h = (time.time() - seg.created_at) / 3600
                     cos_sim  *= math.exp(-time_weight * elapsed_h)
-
                 dense_scores[seg_id] = cos_sim
 
-            # ── Sparse (BM25, already normalised to [0,1]) ─────
             for seg_id, bm25_score in self._bm25[mtype].query(query, top_k=top_k * 3):
                 seg = bank.get(seg_id)
                 if seg is None:
@@ -508,21 +381,17 @@ class Recall:
                     continue
                 bm25_scores[seg_id] = bm25_score
 
-        # ── Fuse scores ────────────────────────────────────────
         all_ids = set(dense_scores) | set(bm25_scores)
-        fused: dict[str, float] = {}
-        for seg_id in all_ids:
-            d = dense_scores.get(seg_id, 0.0)
-            b = bm25_scores.get(seg_id, 0.0)
-            fused[seg_id] = alpha * d + (1 - alpha) * b
+        fused: dict[str, float] = {
+            seg_id: alpha * dense_scores.get(seg_id, 0.0) + (1 - alpha) * bm25_scores.get(seg_id, 0.0)
+            for seg_id in all_ids
+        }
 
-        # ── Rank and collect segments ──────────────────────────
-        ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)
+        ranked  = sorted(fused.items(), key=lambda x: x[1], reverse=True)
         results = []
         for seg_id, score in ranked[:top_k]:
             if score < min_score:
-                break   # sorted descending, so all remaining are also below threshold
-            # Find the segment across all banks
+                break
             seg = None
             for mtype in types:
                 seg = self._banks[mtype].get(seg_id)
@@ -535,22 +404,16 @@ class Recall:
         self.stats["retrieved"] += len(results)
         return results
 
-    # ── 3. MEMORY UPDATE ──────────────────────────────────────────
+    # ── 3. PRUNE ──────────────────────────────────────────────────
 
     def prune_forgotten(self) -> int:
-        """
-        Remove segments below retention threshold.
-        Also removes them from BM25 index (fixes index drift bug).
-        """
+        """Remove segments below retention threshold. Syncs BM25 index."""
         pruned = 0
         for mtype, bank in self._banks.items():
-            to_delete = [
-                seg_id for seg_id, seg in bank.items()
-                if seg.retention() < self.forget_threshold
-            ]
-            for seg_id in to_delete:
-                del bank[seg_id]
-                self._bm25[mtype].delete(seg_id)   # ← sync index
+            to_delete = [sid for sid, seg in bank.items() if seg.retention() < self.forget_threshold]
+            for sid in to_delete:
+                del bank[sid]
+                self._bm25[mtype].delete(sid)
                 pruned += 1
         self.stats["pruned"] += pruned
         if self.verbose and pruned:
@@ -563,16 +426,14 @@ class Recall:
 
     def _save(self, path: str):
         """Persist all segments to JSON (vectors excluded — recomputed on load)."""
-        data = {"stats": self.stats, "segments": []}
-        for seg in self.get_all():
-            data["segments"].append(seg.to_dict())
+        data = {"stats": self.stats, "segments": [seg.to_dict() for seg in self.get_all()]}
         tmp = path + ".tmp"
         with open(tmp, "w") as f:
             json.dump(data, f)
-        os.replace(tmp, path)   # atomic write
+        os.replace(tmp, path)
 
     def _load(self, path: str):
-        """Load segments from JSON, recomputing vectors."""
+        """Load segments from JSON, recomputing vectors via SentenceTransformer."""
         try:
             with open(path) as f:
                 data = json.load(f)
@@ -582,7 +443,6 @@ class Recall:
                 mtype = d.get("memory_type")
                 if mtype not in self._banks:
                     continue
-                # Skip segments below threshold (already forgotten)
                 if d.get("retention", 1.0) < self.forget_threshold:
                     continue
                 vec = self.embedder.fit_transform(d["text"])
@@ -597,11 +457,9 @@ class Recall:
                 logger.warning("Could not load %s: %s", path, e)
 
     def save(self, path: Optional[str] = None):
-        """Manually trigger a save."""
         self._save(path or self.persist_path or "recall_memory.json")
 
     def load(self, path: Optional[str] = None):
-        """Manually trigger a load."""
         self._load(path or self.persist_path or "recall_memory.json")
 
     # ── Utilities ──────────────────────────────────────────────────

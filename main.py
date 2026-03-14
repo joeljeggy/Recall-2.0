@@ -164,7 +164,7 @@ def run_interactive(provider: str = None):
 def main():
     parser = argparse.ArgumentParser(description="Recall Customer Support Demo")
     parser.add_argument("--provider", default=None,
-                        choices=["stub", "gemini", "groq", "openai", "anthropic"],
+                        choices=["stub", "gemini", "groq", "openai", "anthropic", "github"],
                         help="LLM provider (overrides .env RECALL_LLM_PROVIDER)")
     parser.add_argument("--interactive", action="store_true",
                         help="Run in interactive mode")

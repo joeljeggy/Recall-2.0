@@ -110,7 +110,7 @@ class BaseAgent(ABC):
             "Content-Type": "application/json",
         }
         payload = {
-            "model": os.environ.get("RECALL_MODEL", "openai/gpt-4o-mini"),
+            "model": os.environ.get("RECALL_MODEL", "gpt-4o-mini"),
             "messages": [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user",   "content": prompt},

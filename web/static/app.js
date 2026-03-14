@@ -403,13 +403,6 @@ async function loadMemory() {
     document.getElementById('v-task').textContent = d.by_type.task || 0;
     document.getElementById('v-recalls').textContent = `${d.total_recalls || 0} recalls across pipeline`;
     
-    const eb = document.getElementById('embedder-badge');
-    if (eb) {
-      const isST = d.embedder && d.embedder.includes('Sentence');
-      eb.innerHTML = isST ? `${ICONS.bot} Semantic (Sentence-Transformers)` : `${ICONS.hash} Fast Hash (Bag-of-Words)`;
-      eb.style.color = isST ? 'var(--green)' : 'var(--text)';
-    }
-
     document.getElementById('r-high').textContent = d.retention_buckets['high (>0.8)'] || 0;
     document.getElementById('r-mid').textContent = d.retention_buckets['mid (0.4–0.8)'] || 0;
     document.getElementById('r-low').textContent = d.retention_buckets['low (<0.4)'] || 0;
@@ -427,41 +420,179 @@ async function loadMemory() {
         </div>`).join('')
       : '<div style="color:var(--muted);font-size:13px">Insufficient data</div>';
 
-    drawDecayCurve();
+    drawDecayCurve(d.lambda_by_type);
   } catch (e) { toast('Failed to fetch memory state', 'err'); }
 }
 
-function drawDecayCurve() {
+function drawDecayCurve(lambdaByType) {
   const canvas = document.getElementById('decay-canvas');
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  canvas.width = W; canvas.height = H;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
   ctx.clearRect(0, 0, W, H);
 
-  const lambdas = [
-    { l: 0.5, color: '#6366f1' },
-    { l: 2, color: '#10b981' },
-    { l: 5, color: '#f59e0b' },
+  const padL = 36, padR = 16, padT = 28, padB = 22;
+  const W2 = W - padL - padR, H2 = H - padT - padB;
+  const maxHrs = 48;
+
+  const TYPE_META = [
+    { key: 'knowledge', color: '#3b82f6', label: 'knowledge', dflt: 2.0 },
+    { key: 'task',      color: '#22c55e', label: 'task',      dflt: 1.5 },
+    { key: 'dialog',    color: '#f97316', label: 'dialog',    dflt: 1.0 },
   ];
 
-  const pad = 12;
-  const W2 = W - pad*2, H2 = H - pad*2;
-
-  lambdas.forEach(({ l, color }) => {
-    ctx.beginPath();
-    for (let x = 0; x <= W2; x++) {
-      const R = Math.exp(-((x / W2) * 24) / l);
-      const px = pad + x;
-      const py = pad + H2 * (1 - R);
-      x === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-    }
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  const curves = TYPE_META.map(({ key, color, label, dflt }) => {
+    const lambdas = lambdaByType && lambdaByType[key] && lambdaByType[key].length ? lambdaByType[key] : null;
+    const top = lambdas ? lambdas[0] : dflt;
+    const bot = lambdas && lambdas.length > 1 ? lambdas[lambdas.length - 1] : null;
+    return { top, bot, color, label, hasReal: !!lambdas };
   });
 
-  ctx.fillStyle = 'var(--muted)';
-  ctx.font = '10px JetBrains Mono,monospace';
-  ctx.fillText('0h', pad, H - 4);
-  ctx.fillText('24h', W - 30, H - 4);
+  // ── Background subtle gradient ──────────────────────────────
+  const bgGrad = ctx.createLinearGradient(0, padT, 0, padT + H2);
+  bgGrad.addColorStop(0, 'rgba(99,102,241,0.03)');
+  bgGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(padL, padT, W2, H2);
+
+  // ── Grid lines ──────────────────────────────────────────────
+  ctx.save();
+  [0.25, 0.5, 0.75, 1.0].forEach(frac => {
+    const y = padT + H2 * (1 - frac);
+    const grad = ctx.createLinearGradient(padL, y, padL + W2, y);
+    grad.addColorStop(0,   'rgba(255,255,255,0.0)');
+    grad.addColorStop(0.1, frac === 1.0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)');
+    grad.addColorStop(0.9, frac === 1.0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)');
+    grad.addColorStop(1,   'rgba(255,255,255,0.0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = frac === 1.0 ? 1 : 0.5;
+    ctx.setLineDash(frac === 1.0 ? [] : [4, 6]);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + W2, y); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  [12, 24, 36].forEach(h => {
+    const x = padL + (h / maxHrs) * W2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + H2); ctx.stroke();
+  });
+  ctx.restore();
+
+  // ── Draw each curve ──────────────────────────────────────────
+  const points = (lambda) => {
+    const pts = [];
+    for (let x = 0; x <= W2; x += 0.5) {
+      const t = (x / W2) * maxHrs;
+      pts.push([padL + x, padT + H2 * (1 - Math.exp(-t / lambda))]);
+    }
+    return pts;
+  };
+
+  curves.forEach(({ top, bot, color }) => {
+    const pTop = points(top);
+    const pBot = bot !== null && bot !== top ? points(bot) : null;
+
+    // Filled area under top curve with gradient
+    const areaGrad = ctx.createLinearGradient(0, padT, 0, padT + H2);
+    areaGrad.addColorStop(0, color + '22');
+    areaGrad.addColorStop(1, color + '02');
+    ctx.beginPath();
+    pTop.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.lineTo(padL + W2, padT + H2);
+    ctx.lineTo(padL, padT + H2);
+    ctx.closePath();
+    ctx.fillStyle = areaGrad;
+    ctx.fill();
+
+    // Band fill between top and bot
+    if (pBot) {
+      ctx.beginPath();
+      pTop.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+      for (let i = pBot.length - 1; i >= 0; i--) ctx.lineTo(pBot[i][0], pBot[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = color + '14';
+      ctx.fill();
+    }
+
+    // Main line
+    ctx.beginPath();
+    pTop.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Dashed weaker line (no glow)
+    if (pBot) {
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      pBot.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+      ctx.strokeStyle = color + '55';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Dot at t=0
+    ctx.beginPath();
+    ctx.arc(padL, padT, 3, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  // ── Y axis labels ────────────────────────────────────────────
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.font = '500 9px JetBrains Mono, monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('1.0', padL - 6, padT + 4);
+  ctx.fillText('0.5', padL - 6, padT + H2 * 0.5 + 4);
+  ctx.fillText('0',   padL - 6, padT + H2 + 4);
+
+  // ── X axis labels ─────────────────────────────────────────────
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.font = '500 9px JetBrains Mono, monospace';
+  [[0,'0h'],[12,'12h'],[24,'24h'],[36,'36h'],[48,'48h']].forEach(([h, lbl]) => {
+    ctx.fillText(lbl, padL + (h / maxHrs) * W2, H - 4);
+  });
+
+  // ── Legend ────────────────────────────────────────────────────
+  let lx = padL + 4;
+  curves.forEach(({ color, label, top, hasReal }) => {
+    // Pill background
+    const tw = 84;
+    ctx.fillStyle = color + '15';
+    ctx.beginPath();
+    ctx.roundRect(lx, 6, tw, 14, 4);
+    ctx.fill();
+    ctx.strokeStyle = color + '40';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    // Colour swatch
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(lx + 5, 11, 6, 3, 1);
+    ctx.fill();
+    // Label text
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '500 8.5px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(label + ' \u03bb=' + top.toFixed(1) + (hasReal ? '' : '*'), lx + 14, 19);
+    lx += tw + 6;
+  });
+
+  // Footnote
+  if (curves.some(c => !c.hasReal)) {
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.font = '8px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('* default \u03bb\u2080 \u2014 run pipeline to see real curves', padL, H - 6);
+  }
 }
 
 // ── History ──

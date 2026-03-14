@@ -132,14 +132,10 @@ Be concise and factual. 3-5 sentences max. Plain text only."""
         current_dialog_id = context.get("current_dialog_id")
         query         = f"{intent}: {summary}"
 
-        # Thresholds are embedder-aware:
-        #   SentenceTransformer — real semantic cosine (0.3–0.7 for related, 0.05–0.15 unrelated)
-        #     → low threshold fine, semantics already do the filtering
-        #   StableHashEmbedder  — bag-of-words random projections, BM25 dominates scoring
-        #     → needs higher threshold to cut false positives from shared stopwords
-        is_semantic = "Sentence" in type(self.bank.embedder).__name__
-        k_min  = 0.03 if is_semantic else 0.08   # knowledge: broad, keep low
-        dt_min = 0.05 if is_semantic else 0.10   # dialog/task: intent filter handles the rest
+        # SentenceTransformer cosine scores: 0.3–0.7 for related, 0.05–0.15 for unrelated
+        # Low thresholds are fine — semantics do the filtering, intent filter catches the rest
+        k_min  = 0.03   # knowledge: broad, keep low
+        dt_min = 0.05   # dialog/task: intent filter handles the rest
 
         knowledge_mems  = self.recall(query, memory_type="knowledge", top_k=3, min_score=k_min)
         # Pull extra candidates so intent + current_dialog filters don't leave us empty

@@ -252,8 +252,11 @@ def memory_stats():
             "retention_buckets": ret_buckets, "total_recalls": recall_total,
             "deduped":    bank.stats.get("deduped", 0),
             "lifecycle":  bank.stats,
-            "embedder":   type(bank.embedder).__name__,
-            "provider": _provider,
+            "provider":   _provider,
+            "lambda_by_type": {
+                mtype: sorted([round(s.lambda_forget, 2) for s in bank.get_all(memory_type=mtype)], reverse=True)[:5]
+                for mtype in ("knowledge", "dialog", "task")
+            },
         })
     except Exception as e:
         logger.exception("Failed to fetch memory stats")
