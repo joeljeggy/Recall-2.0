@@ -6,6 +6,9 @@ recall_memory.json
 recall_memory.json.tmp
 memory_store/
 
+# Results
+eval/results/
+
 # Python
 __pycache__/
 *.pyc
