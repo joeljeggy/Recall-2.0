@@ -1,4 +1,4 @@
-// ── Icons Helper (updated with viewBox) ──
+// ── Icons Helper (updated with viewBox & Theme icons) ──
 const ICONS = {
   zap: '<svg viewBox="0 0 24 24"><use href="#icon-zap"></use></svg>',
   cpu: '<svg viewBox="0 0 24 24"><use href="#icon-cpu"></use></svg>',
@@ -12,9 +12,37 @@ const ICONS = {
   bot: '<svg viewBox="0 0 24 24"><use href="#icon-bot"></use></svg>'
 };
 
+// ── Theme Toggle Logic ──
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+  
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  
+  const iconId = newTheme === 'light' ? 'moon' : 'sun';
+  document.getElementById('theme-icon').innerHTML = `<use href="#icon-${iconId}"></use>`;
+  
+  // If the memory visualizer page is active, redraw the canvas with the new theme colors
+  if (document.getElementById('page-memory').classList.contains('active')) {
+    drawDecayCurve(currentLambdaData); 
+  }
+}
+
+// Set initial toggle icon on load
+window.addEventListener('DOMContentLoaded', () => {
+  const initialTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const iconId = initialTheme === 'light' ? 'moon' : 'sun';
+  const themeIconEl = document.getElementById('theme-icon');
+  if (themeIconEl) {
+    themeIconEl.innerHTML = `<use href="#icon-${iconId}"></use>`;
+  }
+});
+
 // ── State ──
 let activeFilter = 'all';
 let runHistory = [];
+let currentLambdaData = null; // Stores data to redraw canvas on theme switch/resize without API hits
 
 // ── Nav ──
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -34,7 +62,7 @@ document.getElementById('query-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runPipeline(); }
 });
 
-// ── API ──
+// ── API (Original logic restored) ──
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
@@ -159,6 +187,7 @@ async function runPipeline() {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // Original SSE Streaming logic restored
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -397,6 +426,8 @@ async function pruneMemory() {
 async function loadMemory() {
   try {
     const d = await api('GET', '/api/memory/stats');
+    currentLambdaData = d.lambda_by_type; 
+    
     document.getElementById('v-total').textContent = d.total;
     document.getElementById('v-knowledge').textContent = d.by_type.knowledge || 0;
     document.getElementById('v-dialog').textContent = d.by_type.dialog || 0;
@@ -420,20 +451,31 @@ async function loadMemory() {
         </div>`).join('')
       : '<div style="color:var(--muted);font-size:13px">Insufficient data</div>';
 
-    drawDecayCurve(d.lambda_by_type);
+    drawDecayCurve(currentLambdaData);
   } catch (e) { toast('Failed to fetch memory state', 'err'); }
 }
 
+// ── Enhanced Canvas Drawing for Light/Dark Mode ──
 function drawDecayCurve(lambdaByType) {
   const canvas = document.getElementById('decay-canvas');
+  if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return; // Prevent 0 size errors when hidden
+
   canvas.width  = rect.width  * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
   ctx.clearRect(0, 0, W, H);
+
+  // Determine Theme variables for Canvas Drawing
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const cGrid = isLight ? '0,0,0' : '255,255,255'; 
+  const cAxisL = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.22)';
+  const cLabel = isLight ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.65)';
+  const cFootnote = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.18)';
 
   const padL = 36, padR = 16, padT = 28, padB = 22;
   const W2 = W - padL - padR, H2 = H - padT - padB;
@@ -454,7 +496,7 @@ function drawDecayCurve(lambdaByType) {
 
   // ── Background subtle gradient ──────────────────────────────
   const bgGrad = ctx.createLinearGradient(0, padT, 0, padT + H2);
-  bgGrad.addColorStop(0, 'rgba(99,102,241,0.03)');
+  bgGrad.addColorStop(0, isLight ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)');
   bgGrad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(padL, padT, W2, H2);
@@ -464,10 +506,10 @@ function drawDecayCurve(lambdaByType) {
   [0.25, 0.5, 0.75, 1.0].forEach(frac => {
     const y = padT + H2 * (1 - frac);
     const grad = ctx.createLinearGradient(padL, y, padL + W2, y);
-    grad.addColorStop(0,   'rgba(255,255,255,0.0)');
-    grad.addColorStop(0.1, frac === 1.0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)');
-    grad.addColorStop(0.9, frac === 1.0 ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.05)');
-    grad.addColorStop(1,   'rgba(255,255,255,0.0)');
+    grad.addColorStop(0,   `rgba(${cGrid},0.0)`);
+    grad.addColorStop(0.1, frac === 1.0 ? `rgba(${cGrid},0.15)` : `rgba(${cGrid},0.06)`);
+    grad.addColorStop(0.9, frac === 1.0 ? `rgba(${cGrid},0.15)` : `rgba(${cGrid},0.06)`);
+    grad.addColorStop(1,   `rgba(${cGrid},0.0)`);
     ctx.strokeStyle = grad;
     ctx.lineWidth = frac === 1.0 ? 1 : 0.5;
     ctx.setLineDash(frac === 1.0 ? [] : [4, 6]);
@@ -476,7 +518,7 @@ function drawDecayCurve(lambdaByType) {
   ctx.setLineDash([]);
   [12, 24, 36].forEach(h => {
     const x = padL + (h / maxHrs) * W2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.strokeStyle = `rgba(${cGrid},0.06)`;
     ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + H2); ctx.stroke();
   });
@@ -546,7 +588,7 @@ function drawDecayCurve(lambdaByType) {
   });
 
   // ── Y axis labels ────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillStyle = cAxisL;
   ctx.font = '500 9px JetBrains Mono, monospace';
   ctx.textAlign = 'right';
   ctx.fillText('1.0', padL - 6, padT + 4);
@@ -555,7 +597,7 @@ function drawDecayCurve(lambdaByType) {
 
   // ── X axis labels ─────────────────────────────────────────────
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillStyle = cAxisL;
   ctx.font = '500 9px JetBrains Mono, monospace';
   [[0,'0h'],[12,'12h'],[24,'24h'],[36,'36h'],[48,'48h']].forEach(([h, lbl]) => {
     ctx.fillText(lbl, padL + (h / maxHrs) * W2, H - 4);
@@ -579,7 +621,7 @@ function drawDecayCurve(lambdaByType) {
     ctx.roundRect(lx + 5, 11, 6, 3, 1);
     ctx.fill();
     // Label text
-    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.fillStyle = cLabel;
     ctx.font = '500 8.5px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
     ctx.fillText(label + ' \u03bb=' + top.toFixed(1) + (hasReal ? '' : '*'), lx + 14, 19);
@@ -588,12 +630,19 @@ function drawDecayCurve(lambdaByType) {
 
   // Footnote
   if (curves.some(c => !c.hasReal)) {
-    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillStyle = cFootnote;
     ctx.font = '8px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
     ctx.fillText('* default \u03bb\u2080 \u2014 run pipeline to see real curves', padL, H - 6);
   }
 }
+
+// Handle resize to redraw canvas
+window.addEventListener('resize', () => {
+  if (document.getElementById('page-memory').classList.contains('active')) {
+    drawDecayCurve(currentLambdaData);
+  }
+});
 
 // ── History ──
 async function loadHistory(filter = 'all') {

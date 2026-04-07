@@ -1,7 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Enterprise SaaS Dark Theme */
+  /* Enterprise SaaS Dark Theme (Default) */
   --bg: #09090b;
   --surface: #131316;
   --card: #18181b;
@@ -10,7 +10,7 @@
   --border2: #3f3f46;
   
   /* Accents */
-  --accent: #6366f1; /* Indigo */
+  --accent: #6366f1;
   --accent-hover: #4f46e5;
   --accent-dim: rgba(99, 102, 241, 0.1);
   
@@ -31,10 +31,33 @@
   --knowledge-c: #6366f1;
   --response-c: #10b981;
   
+  --curve-bg: linear-gradient(180deg, #0d0d10 0%, #09090b 100%);
+  
   --r: 8px;
   --mono: 'JetBrains Mono', monospace;
   --sans: 'Inter', sans-serif;
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="light"] {
+  /* Enterprise SaaS Light Theme */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --card: #f4f4f5;
+  --card-hover: #e4e4e7;
+  --border: #e4e4e7;
+  --border2: #d4d4d8;
+  
+  --accent-dim: rgba(99, 102, 241, 0.15);
+  --green-dim: rgba(16, 185, 129, 0.15);
+  --amber-dim: rgba(245, 158, 11, 0.15);
+  --red-dim: rgba(239, 68, 68, 0.15);
+  
+  --text: #09090b;
+  --muted: #52525b;
+  --subtle: #a1a1aa;
+  
+  --curve-bg: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
 }
 
 html, body {
@@ -44,6 +67,7 @@ html, body {
   color: var(--text);
   font-family: var(--sans);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ── SVG Icons ── */
@@ -73,8 +97,7 @@ svg {
   align-items: center;
   gap: 16px;
   padding: 0 24px;
-  background: rgba(19, 19, 22, 0.8);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   z-index: 20;
 }
@@ -225,14 +248,19 @@ svg {
   white-space: nowrap;
 }
 
+.btn-icon {
+  padding: 8px;
+}
+
 .btn-primary {
   background: var(--text);
   color: var(--bg);
 }
 
 .btn-primary:hover {
-  background: #fff;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.1);
+  background: var(--subtle);
+  color: var(--bg);
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.1);
 }
 
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -300,12 +328,12 @@ svg {
   min-height: 120px;
   transition: var(--transition);
   line-height: 1.6;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .query-textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), inset 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 0 0 1px var(--accent), inset 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .query-bottom {
@@ -412,7 +440,6 @@ svg {
 }
 
 .step-chevron.open { transform: rotate(180deg); }
-
 
 /* ── Smooth Dropdown Animations ── */
 .step-body, .run-detail {
@@ -639,9 +666,9 @@ svg {
   margin-top: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #0d0d10 0%, #09090b 100%);
+  background: var(--curve-bg);
   overflow: hidden;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.1);
 }
 canvas { width: 100%; height: 100%; }
 
@@ -758,7 +785,7 @@ canvas { width: 100%; height: 100%; }
 .intent-billing { color: var(--amber); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
 .intent-technical { color: var(--red); border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05); }
 .intent-account { color: var(--accent); border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.05); }
-.intent-general { color: var(--muted); border-color: var(--border); background: var(--bg); }
+.intent-general { color: var(--muted); border-color: var(--border); background: rgba(161,161,170,0.05); }
 
 .type-badge.knowledge { color: var(--knowledge-c); background: rgba(99,102,241,0.05); }
 .type-badge.dialog { color: var(--intake-c); background: rgba(245,158,11,0.05); }
@@ -774,7 +801,7 @@ canvas { width: 100%; height: 100%; }
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255,255,255,0.2);
+  border: 2px solid rgba(128,128,128,0.2);
   border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -802,7 +829,7 @@ canvas { width: 100%; height: 100%; }
   font-weight: 500;
   background: var(--surface);
   border: 1px solid var(--border);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   animation: toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   max-width: 320px;
 }
