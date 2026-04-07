@@ -40,7 +40,7 @@
 }
 
 [data-theme="light"] {
-  /* Enterprise SaaS Light Theme */
+  /* Base Colors */
   --bg: #fafafa;
   --surface: #ffffff;
   --card: #f4f4f5;
@@ -48,16 +48,43 @@
   --border: #e4e4e7;
   --border2: #d4d4d8;
   
-  --accent-dim: rgba(99, 102, 241, 0.15);
-  --green-dim: rgba(16, 185, 129, 0.15);
-  --amber-dim: rgba(245, 158, 11, 0.15);
-  --red-dim: rgba(239, 68, 68, 0.15);
-  
+  /* Darker text for maximum readability */
   --text: #09090b;
   --muted: #52525b;
-  --subtle: #a1a1aa;
+  --subtle: #71717a;
+  
+  /* Deepened Accents for Light Mode Contrast */
+  --accent: #4f46e5;
+  --green: #059669;
+  --amber: #d97706;
+  --red: #dc2626;
+  
+  /* Deepened Agent Colors */
+  --intake-c: #d97706;
+  --knowledge-c: #4f46e5;
+  --response-c: #059669;
   
   --curve-bg: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
+}
+
+/* ── Add these overrides to the bottom of your styles.css ── */
+/* Fixes the hardcoded RGBA backgrounds for badges/intents in light mode */
+[data-theme="light"] .intent-billing, 
+[data-theme="light"] .type-badge.dialog {
+  border-color: rgba(217, 119, 6, 0.3); background: rgba(217, 119, 6, 0.1);
+}
+[data-theme="light"] .intent-technical {
+  border-color: rgba(220, 38, 38, 0.3); background: rgba(220, 38, 38, 0.1);
+}
+[data-theme="light"] .intent-account, 
+[data-theme="light"] .type-badge.knowledge {
+  border-color: rgba(79, 70, 229, 0.3); background: rgba(79, 70, 229, 0.1);
+}
+[data-theme="light"] .type-badge.task {
+  background: rgba(5, 150, 105, 0.1);
+}
+[data-theme="light"] .result-box {
+  background: rgba(5, 150, 105, 0.05); border-color: rgba(5, 150, 105, 0.2);
 }
 
 html, body {
