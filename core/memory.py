@@ -170,9 +170,9 @@ class MemorySegment:
     MEMORY_TYPES = ("knowledge", "dialog", "task")
 
     LAMBDA_INIT = {
-        "knowledge": 2.0,
-        "task":      1.5,
-        "dialog":    1.0,
+        "knowledge": 24.0,
+        "task":      15.0,
+        "dialog":    10.0,
     }
 
     def __init__(

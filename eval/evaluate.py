@@ -382,6 +382,7 @@ Be concise. 3-5 sentences max."""
 def build_pipeline(mode: str, provider: str, model: Optional[str] = None):
     """
     Returns (pipeline, bank) for the given evaluation mode.
+    Memory is cleared before seeding to ensure each mode starts fresh.
 
     Modes:
       context_stuffing — no retrieval, raw history injection
@@ -392,10 +393,8 @@ def build_pipeline(mode: str, provider: str, model: Optional[str] = None):
     verbose = False
 
     if mode == "context_stuffing":
-        # Use a real Recall bank just for storage structure, but agents don't use it
-        bank = Recall(forget_threshold=0.02, dedup_threshold=0.92,
-                      verbose=verbose)
-        seed_customer_support_knowledge(bank)
+        bank = Recall(forget_threshold=0.02, dedup_threshold=0.92, verbose=verbose)
+        _clear_and_reseed(bank, mode)
         agents = [
             ContextStuffingIntakeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
             ContextStuffingKnowledgeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
@@ -406,7 +405,7 @@ def build_pipeline(mode: str, provider: str, model: Optional[str] = None):
 
     elif mode == "rag_cosine":
         bank = StaticRecall(forget_threshold=0.02, dedup_threshold=0.92, verbose=verbose)
-        seed_customer_support_knowledge(bank)
+        _clear_and_reseed(bank, mode)
         agents = [
             # Override recall alpha to 1.0 — cosine only
             _make_cosine_intake(bank, provider, model, verbose),
@@ -418,7 +417,7 @@ def build_pipeline(mode: str, provider: str, model: Optional[str] = None):
 
     elif mode == "rag_hybrid":
         bank = StaticRecall(forget_threshold=0.02, dedup_threshold=0.92, verbose=verbose)
-        seed_customer_support_knowledge(bank)
+        _clear_and_reseed(bank, mode)
         agents = [
             IntakeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
             KnowledgeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
@@ -429,7 +428,7 @@ def build_pipeline(mode: str, provider: str, model: Optional[str] = None):
 
     elif mode == "recall":
         bank = Recall(forget_threshold=0.02, dedup_threshold=0.92, verbose=verbose)
-        seed_customer_support_knowledge(bank)
+        _clear_and_reseed(bank, mode)
         agents = [
             IntakeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
             KnowledgeAgent(bank, llm_provider=provider, model=model, verbose=verbose),
@@ -469,6 +468,17 @@ def _make_cosine_knowledge(bank, provider, model, verbose):
 #  Run evaluation
 # -----------------------------------------------------------------
 
+def _clear_and_reseed(bank: Recall, mode: str, verbose: bool = False):
+    """Clear all memory banks and reseed base knowledge."""
+    for mtype in list(bank._banks.keys()):
+        bank._banks[mtype].clear()
+        bank._bm25[mtype] = BM25Retriever()
+    bank.stats = {"stored": 0, "retrieved": 0, "pruned": 0, "deduped": 0}
+    seed_customer_support_knowledge(bank)
+    if verbose:
+        print(f"    [Reseed] Memory cleared and base knowledge reseeded for {mode}")
+
+
 def run_evaluation(modes: list[str], provider: str, model: Optional[str] = None) -> dict:
     # Load queries
     queries_path = os.path.join(os.path.dirname(__file__), "queries.json")
@@ -487,9 +497,11 @@ def run_evaluation(modes: list[str], provider: str, model: Optional[str] = None)
         print(f"  MODE: {mode.upper()}")
         print(f"{'='*60}")
 
+        # Build pipeline — memory is cleared and base knowledge seeded fresh per mode
         pipeline, bank = build_pipeline(mode, provider, model)
         mode_results   = []
         conversation_history = []  # for context stuffing
+        query_count = 0  # track queries for periodic reseed
 
         for q in queries:
             qid     = q["id"]
@@ -499,6 +511,11 @@ def run_evaluation(modes: list[str], provider: str, model: Optional[str] = None)
             cross_ref_id = q.get("cross_turn_ref")
             prior_query = next((x["query"] for x in queries if x["id"] == cross_ref_id), None) \
                           if cross_ref_id else None
+
+            # Reseed base knowledge every 10 queries to prevent knowledge bank decay
+            if query_count > 0 and query_count % 10 == 0:
+                print(f"    [Reseed] Reseeding base knowledge at query {query_count} for {mode}")
+                seed_customer_support_knowledge(bank)
 
             print(f"\n  Q{qid}: {query[:70]}...")
 
@@ -566,6 +583,8 @@ def run_evaluation(modes: list[str], provider: str, model: Optional[str] = None)
             # Update conversation history for context stuffing
             conversation_history.append({"role": "user",      "content": query})
             conversation_history.append({"role": "assistant",  "content": response[:200]})
+
+            query_count += 1
 
             print(f"    [OK] P@3={p_at_3:.2f}  KwCov={kw_cov:.2f}  "
                   f"Memories={total_memories}  {elapsed_ms}ms  "

@@ -482,9 +482,9 @@ function drawDecayCurve(lambdaByType) {
   const maxHrs = 48;
 
 const TYPE_META = [
-    { key: 'knowledge', color: isLight ? '#4f46e5' : '#3b82f6', label: 'knowledge', dflt: 2.0 },
-    { key: 'task',      color: isLight ? '#059669' : '#22c55e', label: 'task',      dflt: 1.5 },
-    { key: 'dialog',    color: isLight ? '#d97706' : '#f97316', label: 'dialog',    dflt: 1.0 },
+    { key: 'knowledge', color: isLight ? '#4f46e5' : '#3b82f6', label: 'knowledge', dflt: 24.0 },
+    { key: 'task',      color: isLight ? '#059669' : '#22c55e', label: 'task',      dflt: 15.0 },
+    { key: 'dialog',    color: isLight ? '#d97706' : '#f97316', label: 'dialog',    dflt: 10.0 },
   ];
 
   const curves = TYPE_META.map(({ key, color, label, dflt }) => {

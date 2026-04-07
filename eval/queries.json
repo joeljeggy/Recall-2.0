@@ -1,75 +1,41 @@
 {
   "queries": [
-    {
-      "id": 1,
-      "query": "I was charged twice this month on my credit card.",
-      "intent": "billing",
-      "relevant_keywords": ["billing", "charged", "refund", "payment", "invoice"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 2,
-      "query": "Has my refund been processed yet?",
-      "intent": "billing",
-      "relevant_keywords": ["refund", "processed", "business days", "billing"],
-      "cross_turn_ref": 1
-    },
-    {
-      "id": 3,
-      "query": "I cannot log in to my account, keeps saying invalid credentials.",
-      "intent": "account",
-      "relevant_keywords": ["login", "password", "credentials", "cache", "authentication"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 4,
-      "query": "My API requests are failing with a 429 error every evening.",
-      "intent": "technical",
-      "relevant_keywords": ["API", "rate limit", "429", "requests", "enterprise"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 5,
-      "query": "I want to cancel my subscription and get a refund.",
-      "intent": "refund",
-      "relevant_keywords": ["cancel", "refund", "subscription", "billing period", "14 days"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 6,
-      "query": "How do I add more team members to my account?",
-      "intent": "account",
-      "relevant_keywords": ["team", "members", "sub-accounts", "management"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 7,
-      "query": "When is your next maintenance window?",
-      "intent": "technical",
-      "relevant_keywords": ["maintenance", "Sunday", "UTC", "status", "downtime"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 8,
-      "query": "I think there is a mistake on my latest invoice.",
-      "intent": "billing",
-      "relevant_keywords": ["invoice", "billing", "error", "refund", "account settings"],
-      "cross_turn_ref": 1
-    },
-    {
-      "id": 9,
-      "query": "How do I enable two-factor authentication?",
-      "intent": "account",
-      "relevant_keywords": ["two-factor", "2FA", "security", "settings", "authentication"],
-      "cross_turn_ref": null
-    },
-    {
-      "id": 10,
-      "query": "I still have not received my money back from last week.",
-      "intent": "billing",
-      "relevant_keywords": ["refund", "money", "billing", "7 business days", "processed"],
-      "cross_turn_ref": 1
-    }
+  {"id": 1,"query": "I was charged twice this month on my credit card.","intent": "billing","relevant_keywords": ["billing", "charged", "refund", "payment", "invoice"],"cross_turn_ref": null},
+  {"id": 2,"query": "Has my refund been processed yet?","intent": "billing","relevant_keywords": ["refund", "processed", "business days", "billing"],"cross_turn_ref": 1},
+  {"id": 3,"query": "I cannot log in to my account, keeps saying invalid credentials.","intent": "account","relevant_keywords": ["login", "password", "credentials", "cache", "authentication"],"cross_turn_ref": null},
+  {"id": 4,"query": "My API requests are failing with a 429 error every evening.","intent": "technical","relevant_keywords": ["API", "rate limit", "429", "requests", "enterprise"],"cross_turn_ref": null},
+  {"id": 5,"query": "I want to cancel my subscription and get a refund.","intent": "refund","relevant_keywords": ["cancel", "refund", "subscription", "billing period", "14 days"],"cross_turn_ref": null},
+  {"id": 6,"query": "How do I add more team members to my account?","intent": "account","relevant_keywords": ["team", "members", "sub-accounts", "management"],"cross_turn_ref": null},
+  {"id": 7,"query": "When is your next maintenance window?","intent": "technical","relevant_keywords": ["maintenance", "Sunday", "UTC", "status", "downtime"],"cross_turn_ref": null},
+  {"id": 8,"query": "I think there is a mistake on my latest invoice.","intent": "billing","relevant_keywords": ["invoice", "billing", "error", "refund", "account settings"],"cross_turn_ref": 1},
+  {"id": 9,"query": "How do I enable two-factor authentication?","intent": "account","relevant_keywords": ["two-factor", "2FA", "security", "settings", "authentication"],"cross_turn_ref": null},
+  {"id": 10,"query": "I still have not received my money back from last week.","intent": "billing","relevant_keywords": ["refund", "money", "billing", "7 business days", "processed"],"cross_turn_ref": 1},
+  {"id": 11, "query": "Why did I get charged twice this month?", "intent": "billing","relevant_keywords": ["billing", "charged", "duplicate", "refund", "payment"], "cross_turn_ref": null},
+  {"id": 12, "query": "I think I was billed twice for the same thing.", "intent": "billing","relevant_keywords": ["billing", "duplicate", "charged", "refund", "invoice"], "cross_turn_ref": null},
+  {"id": 13, "query": "Still waiting on my refund, any update?", "intent": "billing","relevant_keywords": ["refund", "status", "processed", "business days", "billing"], "cross_turn_ref": 11},
+  {"id": 14, "query": "Haven’t received my refund yet, what’s going on?", "intent": "billing","relevant_keywords": ["refund", "status", "processed", "delay", "business days"], "cross_turn_ref": 11},
+  {"id": 15, "query": "Can’t sign in even though my password is correct.", "intent": "account","relevant_keywords": ["login", "password", "credentials", "authentication", "access"], "cross_turn_ref": null},
+  {"id": 16, "query": "Login keeps failing, not sure why.", "intent": "account","relevant_keywords": ["login", "error", "credentials", "authentication", "access"], "cross_turn_ref": null},
+  {"id": 17, "query": "Something is wrong with my account.", "intent": "unknown","relevant_keywords": ["account", "login", "error", "access", "authentication"], "cross_turn_ref": null},
+  {"id": 18, "query": "This isn’t working like it should.", "intent": "unknown","relevant_keywords": ["error", "account", "issue", "system", "failure"], "cross_turn_ref": null},
+  {"id": 19, "query": "Why am I getting errors every evening?", "intent": "technical","relevant_keywords": ["API", "error", "requests", "rate limit", "evening"], "cross_turn_ref": null},
+  {"id": 20, "query": "My payments are acting weird.", "intent": "billing","relevant_keywords": ["billing", "payment", "error", "refund", "invoice"], "cross_turn_ref": null},
+  {"id": 21, "query": "I want to cancel my plan and also get a refund.", "intent": "refund", "relevant_keywords": ["cancel", "refund", "subscription", "billing period", "14 days"],"cross_turn_ref": null},
+  {"id": 22, "query": "I was charged twice and now I want to cancel.", "intent": "billing", "relevant_keywords": ["billing", "charged", "duplicate", "refund", "payment"], "cross_turn_ref": null},
+  {"id": 23, "query": "Can’t log in and I’m also seeing billing issues.", "intent": "mixed", "relevant_keywords": ["login", "billing", "error", "credentials", "authentication"], "cross_turn_ref": null},
+  {"id": 24, "query": "uhh I think I got billed wrong or something??", "intent": "billing", "relevant_keywords": ["billing", "charged", "duplicate", "refund", "invoice"], "cross_turn_ref": null},
+  {"id": 25, "query": "hey I cant login it just says error idk why", "intent": "account", "relevant_keywords": ["login", "error", "credentials", "authentication", "access"], "cross_turn_ref": null},
+  {"id": 26, "query": "yo is refund done yet or still pending??", "intent": "billing", "relevant_keywords": ["refund", "status", "processed", "pending", "billing"], "cross_turn_ref": 24},
+  {"id": 27, "query": "Why am I being blocked after too many requests?", "intent": "technical","relevant_keywords": ["API", "error", "requests", "rate limit", "blocking"], "cross_turn_ref": null},
+  {"id": 28, "query": "How long does it take to get money back after an issue?", "intent": "billing", "relevant_keywords": ["refund", "time", "business days", "processed", "billing"], "cross_turn_ref": null},
+  {"id": 29, "query": "How can I invite people into my workspace?", "intent": "account", "relevant_keywords": ["team", "members", "sub-accounts", "management", "workspace"], "cross_turn_ref": null},
+  {"id": 30, "query": "When does system downtime usually happen?", "intent": "technical", "relevant_keywords": ["maintenance", "downtime", "Sunday", "UTC", "status"], "cross_turn_ref": null},
+  {"id": 31, "query": "How do I change my email address?", "intent": "account", "relevant_keywords": ["account", "email", "settings", "update", "profile"], "cross_turn_ref": null},
+  {"id": 32, "query": "Can I downgrade my plan anytime?", "intent": "billing", "relevant_keywords": ["billing", "downgrade", "plan", "subscription", "policy"], "cross_turn_ref": null},
+  {"id": 33, "query": "What happens if I stop paying?", "intent": "billing", "relevant_keywords": ["billing", "payment", "failed", "account", "pause"], "cross_turn_ref": null},
+  {"id": 34, "query": "I was charged twice this week.", "intent": "billing", "relevant_keywords": ["billing", "charged", "duplicate", "refund", "payment"], "cross_turn_ref": null},
+  {"id": 35, "query": "Any update on that issue?", "intent": "billing", "relevant_keywords": ["refund", "status", "processed", "update", "billing"], "cross_turn_ref": 34},
+  {"id": 36, "query": "Still not fixed yet.", "intent": "billing", "relevant_keywords": ["refund", "status", "delay", "processed", "billing"], "cross_turn_ref": 34}
   ],
   "ground_truth": {
     "1": ["Refunds for billing errors are processed within 5-7 business days.",
@@ -92,6 +58,32 @@
           "Customers can update billing details from Account Settings > Billing."],
     "9": ["Two-factor authentication can be enabled under Security Settings."],
     "10": ["Refunds for billing errors are processed within 5-7 business days.",
-           "Cancellations take effect at end of current billing period; no partial refunds."]
+           "Cancellations take effect at end of current billing period; no partial refunds."],
+    "11": [],    
+    "12": [],
+    "13": [],
+    "14": [],
+    "15": [],
+    "16": [],
+    "17": [],
+    "18": [],
+    "19": [],
+    "20": [],
+    "21": [],
+    "22": [],
+    "23": [],
+    "24": [],
+    "25": [],
+    "26": [],
+    "27": [],
+    "28": [],
+    "29": [],
+    "30": [],
+    "31": [],
+    "32": [],
+    "33": [],
+    "34": [],
+    "35": [],
+    "36": []
   }
 }
