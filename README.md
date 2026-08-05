@@ -1,7 +1,5 @@
 # Recall — Vector-Based Long-Term Memory for Multi-Agent LLM Systems
 
-Based on the paper: _"Vector Storage Based Long-term Memory Research on LLM"_ (Li et al., 2024)
-
 ## Architecture
 
 ```
